@@ -661,19 +661,15 @@ async fn admin_login(username: String, password: String) -> Result<(), ServerFnE
 
         use crate::{auth, config::AppConfig};
 
-        let config = use_context::<AppConfig>().ok_or_else(|| {
-            ServerFnError::ServerError("Application configuration is unavailable.".to_owned())
-        })?;
+        let config = use_context::<AppConfig>()
+            .ok_or_else(|| server_fn_error("Application configuration is unavailable."))?;
         let cookie =
             auth::authenticate_admin_cookie(&config.admin, &config.session, &username, &password)
-                .map_err(|_| {
-                    ServerFnError::ServerError("Invalid username or password.".to_owned())
-                })?;
-        let cookie = HeaderValue::from_str(&cookie).map_err(|_| {
-            ServerFnError::ServerError("Could not set the admin session cookie.".to_owned())
-        })?;
+                .map_err(|_| server_fn_error("Invalid username or password."))?;
+        let cookie = HeaderValue::from_str(&cookie)
+            .map_err(|_| server_fn_error("Could not set the admin session cookie."))?;
         let response = use_context::<ResponseOptions>().ok_or_else(|| {
-            ServerFnError::ServerError("Response options are unavailable.".to_owned())
+            server_fn_error("Response options are unavailable.")
         })?;
 
         response.append_header(header::SET_COOKIE, cookie);
@@ -685,9 +681,7 @@ async fn admin_login(username: String, password: String) -> Result<(), ServerFnE
     #[cfg(not(feature = "ssr"))]
     {
         let _ = (username, password);
-        Err(ServerFnError::ServerError(
-            "Admin login is only available on the server.".to_owned(),
-        ))
+        Err(server_fn_error("Admin login is only available on the server."))
     }
 }
 
@@ -700,11 +694,10 @@ async fn admin_logout() -> Result<(), ServerFnError> {
 
         use crate::auth;
 
-        let cookie = HeaderValue::from_str(&auth::clear_admin_session_cookie()).map_err(|_| {
-            ServerFnError::ServerError("Could not clear the admin session cookie.".to_owned())
-        })?;
+        let cookie = HeaderValue::from_str(&auth::clear_admin_session_cookie())
+            .map_err(|_| server_fn_error("Could not clear the admin session cookie."))?;
         let response = use_context::<ResponseOptions>().ok_or_else(|| {
-            ServerFnError::ServerError("Response options are unavailable.".to_owned())
+            server_fn_error("Response options are unavailable.")
         })?;
 
         response.append_header(header::SET_COOKIE, cookie);
@@ -715,9 +708,7 @@ async fn admin_logout() -> Result<(), ServerFnError> {
 
     #[cfg(not(feature = "ssr"))]
     {
-        Err(ServerFnError::ServerError(
-            "Admin logout is only available on the server.".to_owned(),
-        ))
+        Err(server_fn_error("Admin logout is only available on the server."))
     }
 }
 
@@ -728,15 +719,14 @@ async fn subscribe_newsletter(email: String) -> Result<(), ServerFnError> {
         use crate::repositories::subscribers;
 
         let email = validate_subscriber_email(email)?;
-        let pool = use_context::<sqlx::PgPool>().ok_or_else(|| {
-            ServerFnError::ServerError("Database pool is unavailable.".to_owned())
-        })?;
+        let pool = use_context::<sqlx::PgPool>()
+            .ok_or_else(|| server_fn_error("Database pool is unavailable."))?;
 
         subscribers::create_subscriber(&pool, &email)
             .await
             .map_err(|error| {
                 eprintln!("failed to create newsletter subscriber: {error}");
-                ServerFnError::ServerError("Could not save newsletter signup.".to_owned())
+                server_fn_error("Could not save newsletter signup.")
             })?;
 
         Ok(())
@@ -745,8 +735,8 @@ async fn subscribe_newsletter(email: String) -> Result<(), ServerFnError> {
     #[cfg(not(feature = "ssr"))]
     {
         let _ = email;
-        Err(ServerFnError::ServerError(
-            "Newsletter signup is only available on the server.".to_owned(),
+        Err(server_fn_error(
+            "Newsletter signup is only available on the server.",
         ))
     }
 }
@@ -754,26 +744,18 @@ async fn subscribe_newsletter(email: String) -> Result<(), ServerFnError> {
 fn validate_subscriber_email(email: String) -> Result<String, ServerFnError> {
     let email = email.trim().to_ascii_lowercase();
     if email.is_empty() {
-        return Err(ServerFnError::ServerError(
-            "Email address is required.".to_owned(),
-        ));
+        return Err(server_fn_error("Email address is required."));
     }
     if email.len() > 320 || email.chars().any(char::is_whitespace) {
-        return Err(ServerFnError::ServerError(
-            "Enter a valid email address.".to_owned(),
-        ));
+        return Err(server_fn_error("Enter a valid email address."));
     }
 
     if email.matches('@').count() != 1 {
-        return Err(ServerFnError::ServerError(
-            "Enter a valid email address.".to_owned(),
-        ));
+        return Err(server_fn_error("Enter a valid email address."));
     }
 
     let Some((local, domain)) = email.split_once('@') else {
-        return Err(ServerFnError::ServerError(
-            "Enter a valid email address.".to_owned(),
-        ));
+        return Err(server_fn_error("Enter a valid email address."));
     };
 
     if local.is_empty()
@@ -782,12 +764,14 @@ fn validate_subscriber_email(email: String) -> Result<String, ServerFnError> {
         || domain.starts_with('.')
         || domain.ends_with('.')
     {
-        return Err(ServerFnError::ServerError(
-            "Enter a valid email address.".to_owned(),
-        ));
+        return Err(server_fn_error("Enter a valid email address."));
     }
 
     Ok(email)
+}
+
+fn server_fn_error(message: &str) -> ServerFnError {
+    ServerFnError::ServerError(message.to_owned())
 }
 
 #[component]

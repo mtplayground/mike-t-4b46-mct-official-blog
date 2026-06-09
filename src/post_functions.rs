@@ -277,21 +277,20 @@ fn normalize_offset(offset: i64) -> i64 {
 }
 
 fn validation_error(message: &str) -> ServerFnError {
-    ServerFnError::ServerError(message.to_owned())
+    server_fn_error(message)
 }
 
 fn not_found_error(resource: &str) -> ServerFnError {
-    ServerFnError::ServerError(format!("{resource} was not found."))
+    server_fn_error(&format!("{resource} was not found."))
 }
 
 fn server_only_error(action: &str) -> ServerFnError {
-    ServerFnError::ServerError(format!("{action} is only available on the server."))
+    server_fn_error(&format!("{action} is only available on the server."))
 }
 
 #[cfg(feature = "ssr")]
 fn database_pool() -> Result<sqlx::PgPool, ServerFnError> {
-    use_context::<sqlx::PgPool>()
-        .ok_or_else(|| ServerFnError::ServerError("Database pool is unavailable.".to_owned()))
+    use_context::<sqlx::PgPool>().ok_or_else(|| server_fn_error("Database pool is unavailable."))
 }
 
 #[cfg(feature = "ssr")]
@@ -306,7 +305,11 @@ fn parse_status(status: &str) -> Result<crate::repositories::posts::PostStatus, 
 #[cfg(feature = "ssr")]
 fn database_error(action: &str, error: sqlx::Error) -> ServerFnError {
     eprintln!("failed to {action}: {error}");
-    ServerFnError::ServerError(format!("Could not {action}."))
+    server_fn_error(&format!("Could not {action}."))
+}
+
+fn server_fn_error(message: &str) -> ServerFnError {
+    ServerFnError::ServerError(message.to_owned())
 }
 
 #[cfg(feature = "ssr")]

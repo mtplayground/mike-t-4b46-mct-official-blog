@@ -1,10 +1,10 @@
 use std::{collections::HashMap, error::Error, fmt, time::Duration};
 
 use axum::{
-    Extension, Html, Json,
+    Extension, Json,
     extract::{Path, Query},
     http::{StatusCode, header},
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
