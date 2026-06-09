@@ -1,0 +1,12 @@
+{
+  "name": "mike-t-4b46-mct-official-blog",
+  "private": true,
+  "scripts": {
+    "css:build": "tailwindcss -i ./style/tailwind.css -o ./target/tailwind-check.css --minify",
+    "css:watch": "tailwindcss -i ./style/tailwind.css -o ./target/tailwind-check.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0",
+    "tailwindcss": "^4.3.0"
+  }
+}
