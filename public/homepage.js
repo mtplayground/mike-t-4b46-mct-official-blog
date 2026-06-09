@@ -101,6 +101,6 @@
     })
     .catch((error) => {
       console.error(error);
-      setStatus("Featured posts");
+      setStatus("Recent posts unavailable");
     });
 })();

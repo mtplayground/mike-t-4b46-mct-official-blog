@@ -61,6 +61,15 @@
     return image;
   };
 
+  const readError = async (response, fallback) => {
+    try {
+      const payload = await response.json();
+      return payload.error || fallback;
+    } catch (_error) {
+      return fallback;
+    }
+  };
+
   const renderMedia = (items) => {
     grid.replaceChildren();
 
@@ -111,7 +120,7 @@
     setError("");
     const response = await fetch("/admin/api/media", { credentials: "same-origin" });
     if (!response.ok) {
-      throw new Error("Could not load media.");
+      throw new Error(await readError(response, "Could not load media."));
     }
     renderMedia(await response.json());
   };
@@ -134,13 +143,7 @@
       });
 
       if (!response.ok) {
-        let message = "Upload failed.";
-        try {
-          const payload = await response.json();
-          message = payload.error || message;
-        } catch (_error) {
-        }
-        throw new Error(message);
+        throw new Error(await readError(response, "Upload failed."));
       }
 
       form.reset();
