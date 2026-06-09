@@ -200,8 +200,62 @@ fn HomePage() -> impl IntoView {
                     />
                 </div>
             </section>
+            <NewsletterSignup />
         </div>
         <script src="/homepage.js" defer></script>
+    }
+}
+
+#[component]
+fn NewsletterSignup() -> impl IntoView {
+    let subscribe = ServerAction::<SubscribeNewsletter>::new();
+    let pending = subscribe.pending();
+    let result = subscribe.value();
+    let has_success = move || result.get().is_some_and(|result| result.is_ok());
+    let has_error = move || result.get().is_some_and(|result| result.is_err());
+
+    view! {
+        <section class="grid gap-6 rounded-lg border border-accent-500/30 bg-surface-900 p-6 shadow-red-glow lg:grid-cols-[minmax(0,0.8fr)_minmax(320px,1fr)] lg:items-center">
+            <div>
+                <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Stay in the Loop"</p>
+                <h2 class="mt-3 text-3xl font-black text-foreground">"Get the next delivery note."</h2>
+                <p class="mt-3 max-w-xl leading-7 text-muted">
+                    "Join the myClawTeam Blog list for new posts and product updates. No outbound email is sent yet; this just records your signup."
+                </p>
+            </div>
+            <ActionForm action=subscribe attr:class="flex flex-col gap-3">
+                <div class="flex flex-col gap-3 sm:flex-row">
+                    <label class="sr-only" for="newsletter-email">"Email address"</label>
+                    <input
+                        id="newsletter-email"
+                        class="min-h-12 flex-1 rounded-lg border border-white/10 bg-background px-4 text-base text-foreground outline-none transition placeholder:text-muted focus:border-accent-400"
+                        type="email"
+                        name="email"
+                        placeholder="you@example.com"
+                        autocomplete="email"
+                        required
+                        maxlength="320"
+                    />
+                    <button
+                        class="min-h-12 rounded-lg bg-accent-500 px-5 text-sm font-black text-white transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        type="submit"
+                        disabled=move || pending.get()
+                    >
+                        {move || if pending.get() { "Signing up..." } else { "Sign up" }}
+                    </button>
+                </div>
+                <Show when=has_success fallback=|| ()>
+                    <p class="rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-sm font-bold text-foreground">
+                        "You're on the list."
+                    </p>
+                </Show>
+                <Show when=has_error fallback=|| ()>
+                    <p class="rounded-lg border border-accent-500/40 bg-accent-500/10 px-3 py-2 text-sm font-bold text-accent-300">
+                        "Enter a valid email address and try again."
+                    </p>
+                </Show>
+            </ActionForm>
+        </section>
     }
 }
 
@@ -575,6 +629,75 @@ async fn admin_logout() -> Result<(), ServerFnError> {
             "Admin logout is only available on the server.".to_owned(),
         ))
     }
+}
+
+#[server]
+async fn subscribe_newsletter(email: String) -> Result<(), ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        use crate::repositories::subscribers;
+
+        let email = validate_subscriber_email(email)?;
+        let pool = use_context::<sqlx::PgPool>().ok_or_else(|| {
+            ServerFnError::ServerError("Database pool is unavailable.".to_owned())
+        })?;
+
+        subscribers::create_subscriber(&pool, &email)
+            .await
+            .map_err(|error| {
+                eprintln!("failed to create newsletter subscriber: {error}");
+                ServerFnError::ServerError("Could not save newsletter signup.".to_owned())
+            })?;
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = email;
+        Err(ServerFnError::ServerError(
+            "Newsletter signup is only available on the server.".to_owned(),
+        ))
+    }
+}
+
+fn validate_subscriber_email(email: String) -> Result<String, ServerFnError> {
+    let email = email.trim().to_ascii_lowercase();
+    if email.is_empty() {
+        return Err(ServerFnError::ServerError(
+            "Email address is required.".to_owned(),
+        ));
+    }
+    if email.len() > 320 || email.chars().any(char::is_whitespace) {
+        return Err(ServerFnError::ServerError(
+            "Enter a valid email address.".to_owned(),
+        ));
+    }
+
+    if email.matches('@').count() != 1 {
+        return Err(ServerFnError::ServerError(
+            "Enter a valid email address.".to_owned(),
+        ));
+    }
+
+    let Some((local, domain)) = email.split_once('@') else {
+        return Err(ServerFnError::ServerError(
+            "Enter a valid email address.".to_owned(),
+        ));
+    };
+
+    if local.is_empty()
+        || domain.is_empty()
+        || !domain.contains('.')
+        || domain.starts_with('.')
+        || domain.ends_with('.')
+    {
+        return Err(ServerFnError::ServerError(
+            "Enter a valid email address.".to_owned(),
+        ));
+    }
+
+    Ok(email)
 }
 
 #[component]
