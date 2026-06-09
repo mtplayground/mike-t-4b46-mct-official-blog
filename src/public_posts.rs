@@ -180,6 +180,21 @@ pub async fn robots_txt() -> Response {
     ([(header::CONTENT_TYPE, "text/plain; charset=utf-8")], body).into_response()
 }
 
+pub async fn rss_feed(
+    Extension(pool): Extension<PgPool>,
+) -> Result<Response, PublicPostsError> {
+    let posts = posts::list_all_published_posts(&pool)
+        .await
+        .map_err(PublicPostsError::Database)?;
+    let body = render_rss_feed(&posts);
+
+    Ok((
+        [(header::CONTENT_TYPE, "application/rss+xml; charset=utf-8")],
+        body,
+    )
+        .into_response())
+}
+
 pub async fn posts_index(
     Extension(pool): Extension<PgPool>,
     Query(query): Query<PaginationQuery>,
@@ -755,6 +770,59 @@ fn sitemap_url(
         lastmod,
         escape_xml(changefreq),
         escape_xml(priority),
+    )
+}
+
+fn render_rss_feed(posts: &[posts::Post]) -> String {
+    let items = posts
+        .iter()
+        .map(render_rss_item)
+        .collect::<Vec<_>>()
+        .join("");
+
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+<title>{title}</title>
+<link>{site_url}</link>
+<description>{description}</description>
+<language>en-us</language>
+<atom:link href="{feed_url}" rel="self" type="application/rss+xml" />
+{items}</channel>
+</rss>
+"#,
+        title = escape_xml(SITE_NAME),
+        site_url = escape_xml(&absolute_url("/")),
+        description = escape_xml("By talking, serious delivery."),
+        feed_url = escape_xml(&absolute_url("/feed.xml")),
+        items = items,
+    )
+}
+
+fn render_rss_item(post: &posts::Post) -> String {
+    let path = format!("/posts/{}", post.slug);
+    let url = absolute_url(&path);
+    let description = excerpt_from_body(&post.body);
+    let published_at = post
+        .published_at
+        .as_ref()
+        .map(ToString::to_string)
+        .unwrap_or_else(|| post.updated_at.to_string());
+
+    format!(
+        r#"<item>
+<title>{title}</title>
+<link>{url}</link>
+<guid isPermaLink="true">{url}</guid>
+<description>{description}</description>
+<pubDate>{published_at}</pubDate>
+</item>
+"#,
+        title = escape_xml(&post.title),
+        url = escape_xml(&url),
+        description = escape_xml(&description),
+        published_at = escape_xml(&published_at),
     )
 }
 
