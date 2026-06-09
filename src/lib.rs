@@ -1,6 +1,9 @@
 pub mod app;
 
 #[cfg(feature = "ssr")]
+pub mod config;
+
+#[cfg(feature = "ssr")]
 pub mod db;
 
 #[cfg(feature = "hydrate")]
