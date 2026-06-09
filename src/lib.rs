@@ -7,6 +7,9 @@ pub mod config;
 pub mod db;
 
 #[cfg(feature = "ssr")]
+pub mod repositories;
+
+#[cfg(feature = "ssr")]
 pub mod storage;
 
 #[cfg(feature = "hydrate")]

@@ -16,7 +16,8 @@ leptos = { version = "0.8" }
 leptos_axum = { version = "0.8", optional = true }
 leptos_meta = { version = "0.8" }
 leptos_router = { version = "0.8" }
-sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "migrate", "macros"], optional = true }
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "migrate", "macros", "time"], optional = true }
+time = { version = "0.3", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"], optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 
@@ -33,6 +34,7 @@ ssr = [
     "dep:axum",
     "dep:leptos_axum",
     "dep:sqlx",
+    "dep:time",
     "dep:tokio",
     "leptos/ssr",
     "leptos_meta/ssr",
