@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt};
+use std::{collections::HashMap, error::Error, fmt, time::Duration};
 
 use axum::{
     Extension, Html, Json,
@@ -9,11 +9,15 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
-use crate::repositories::posts;
+use crate::{
+    repositories::{media, posts},
+    storage::{ObjectStorage, StorageError},
+};
 
 const RECENT_POST_LIMIT: i64 = 6;
 const POSTS_PER_PAGE: i64 = 9;
 const EXCERPT_CHAR_LIMIT: usize = 160;
+const PRESIGNED_MEDIA_TTL: Duration = Duration::from_secs(60 * 60);
 const CATEGORY_FILTERS: [CategoryFilter; 3] = [
     CategoryFilter {
         slug: "thoughts",
@@ -61,6 +65,8 @@ pub struct PaginationQuery {
 #[derive(Debug)]
 pub enum PublicPostsError {
     Database(sqlx::Error),
+    Storage(StorageError),
+    PostNotFound(String),
     CategoryNotFound(String),
 }
 
@@ -68,6 +74,8 @@ impl fmt::Display for PublicPostsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Database(_) => write!(f, "failed to load public posts"),
+            Self::Storage(_) => write!(f, "failed to sign embedded media"),
+            Self::PostNotFound(slug) => write!(f, "post not found: {slug}"),
             Self::CategoryNotFound(slug) => write!(f, "category filter not found: {slug}"),
         }
     }
@@ -77,6 +85,8 @@ impl Error for PublicPostsError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Database(error) => Some(error),
+            Self::Storage(error) => Some(error),
+            Self::PostNotFound(_) => None,
             Self::CategoryNotFound(_) => None,
         }
     }
@@ -86,7 +96,7 @@ impl IntoResponse for PublicPostsError {
     fn into_response(self) -> Response {
         eprintln!("public posts error: {self:?}");
         match self {
-            Self::Database(_) => (
+            Self::Database(_) | Self::Storage(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorMessage {
                     error: "Could not load recent posts. Please try again.",
@@ -95,10 +105,18 @@ impl IntoResponse for PublicPostsError {
                 .into_response(),
             Self::CategoryNotFound(slug) => (
                 StatusCode::NOT_FOUND,
-                Html(render_not_found_page(&format!(
-                    "Category filter '{}' was not found.",
-                    escape_html(&slug)
-                ))),
+                Html(render_not_found_page(
+                    "Category not found",
+                    &format!("Category filter '{}' was not found.", slug),
+                )),
+            )
+                .into_response(),
+            Self::PostNotFound(slug) => (
+                StatusCode::NOT_FOUND,
+                Html(render_not_found_page(
+                    "Post not found",
+                    &format!("Post '{}' was not found.", slug),
+                )),
             )
                 .into_response(),
         }
@@ -218,6 +236,26 @@ pub async fn category_index(
         &base_path,
         Some(category.slug),
     )))
+}
+
+pub async fn post_detail(
+    Extension(pool): Extension<PgPool>,
+    Extension(storage): Extension<ObjectStorage>,
+    Path(slug): Path<String>,
+) -> Result<Html<String>, PublicPostsError> {
+    let post = posts::get_post_by_slug(&pool, &slug)
+        .await
+        .map_err(PublicPostsError::Database)?
+        .filter(|post| post.status == "published")
+        .ok_or_else(|| PublicPostsError::PostNotFound(slug.clone()))?;
+    let category = posts::list_categories(&pool)
+        .await
+        .map_err(PublicPostsError::Database)?
+        .into_iter()
+        .find(|category| category.id == post.category_id);
+    let body_html = render_rich_body(&pool, &storage, &post.body).await?;
+
+    Ok(Html(render_post_detail_page(&post, category.as_ref(), &body_html)))
 }
 
 fn excerpt_from_body(body: &str) -> String {
@@ -342,6 +380,7 @@ fn render_post_card(post: &posts::Post, category_names: &HashMap<i64, String>) -
         .map(|value| first_date_chars(&value.to_string()))
         .unwrap_or_else(|| "Published".to_owned());
     let excerpt = excerpt_from_body(&post.body);
+    let href = format!("/posts/{}", post.slug);
 
     format!(
         r#"<article class="group flex min-h-72 flex-col justify-between rounded-lg border border-white/10 bg-surface-900 p-5 transition hover:-translate-y-1 hover:border-accent-400/60 hover:shadow-red-glow">
@@ -355,14 +394,196 @@ fn render_post_card(post: &posts::Post, category_names: &HashMap<i64, String>) -
 </div>
 <div class="mt-8 flex items-center justify-between gap-4 border-t border-white/10 pt-4">
 <p class="text-xs font-bold uppercase tracking-wide text-muted">{published_at}</p>
-<span class="rounded-lg border border-white/10 px-3 py-2 text-sm font-black text-muted">Published</span>
+<a href="{href}" class="rounded-lg border border-white/10 px-3 py-2 text-sm font-black text-foreground transition group-hover:border-accent-400 group-hover:text-accent-400">Read</a>
 </div>
 </article>"#,
         category = escape_html(category),
         title = escape_html(&post.title),
         excerpt = escape_html(&excerpt),
         published_at = escape_html(&published_at),
+        href = escape_html(&href),
     )
+}
+
+fn render_post_detail_page(
+    post: &posts::Post,
+    category: Option<&posts::Category>,
+    body_html: &str,
+) -> String {
+    let category_name = category.map(|category| category.name.as_str()).unwrap_or("Post");
+    let category_href = category
+        .map(|category| format!("/categories/{}", category.slug))
+        .unwrap_or_else(|| "/posts".to_owned());
+    let published_at = post
+        .published_at
+        .map(|value| first_date_chars(&value.to_string()))
+        .unwrap_or_else(|| "Published".to_owned());
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{title} | myClawTeam Blog</title>
+<link rel="stylesheet" href="/pkg/mike-t-4b46-mct-official-blog.css" />
+</head>
+<body>
+<div class="min-h-screen bg-background text-foreground antialiased">
+<div class="flex min-h-screen flex-col">
+<header class="sticky top-0 z-20 border-b border-white/10 bg-background/90 shadow-red-glow backdrop-blur-xl">
+<div class="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4 sm:px-10">
+<a href="/" class="group inline-flex items-center gap-3 text-base font-black text-foreground">
+<span class="grid h-9 w-9 place-items-center rounded-lg border border-accent-400/40 bg-accent-500 text-sm text-white shadow-red-glow">M</span>
+<span class="leading-tight">myClawTeam<span class="block text-xs font-bold uppercase tracking-wide text-accent-400">Blog</span></span>
+</a>
+<nav aria-label="Primary navigation" class="flex items-center gap-2 text-sm font-bold text-muted">
+<a href="/" class="rounded-lg px-3 py-2 transition hover:bg-white/5 hover:text-foreground">Home</a>
+<a href="/posts" class="rounded-lg px-3 py-2 text-accent-400 transition hover:bg-white/5 hover:text-foreground">Posts</a>
+<a href="/admin" class="rounded-lg border border-accent-400/40 px-3 py-2 text-accent-400 transition hover:bg-accent-500 hover:text-white">Admin</a>
+</nav>
+</div>
+</header>
+<main id="content" class="flex-1">
+<article class="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-16 sm:px-10 lg:py-20">
+<div class="flex flex-wrap items-center gap-3 text-sm font-black uppercase tracking-wide text-muted">
+<a href="{category_href}" class="rounded-lg border border-accent-400/40 px-3 py-2 text-accent-400 transition hover:bg-accent-500 hover:text-white">{category}</a>
+<span>{published_at}</span>
+</div>
+<header class="flex flex-col gap-5">
+<h1 class="text-display font-black leading-none text-foreground">{title}</h1>
+</header>
+<div class="flex flex-col gap-6 text-lg leading-8 text-muted">{body_html}</div>
+<nav aria-label="Post navigation" class="border-t border-white/10 pt-6">
+<a href="/posts" class="rounded-lg border border-white/10 px-3 py-2 text-sm font-black text-foreground transition hover:border-accent-400 hover:text-accent-400">All posts</a>
+</nav>
+</article>
+</main>
+<footer class="border-t border-white/10 bg-background/70">
+<div class="mx-auto grid w-full max-w-6xl gap-6 px-6 py-10 text-sm text-muted sm:grid-cols-[1fr_auto] sm:items-end sm:px-10">
+<div><p class="text-base font-black text-foreground">myClawTeam Blog</p><p class="mt-2 max-w-xl leading-6">By talking, serious delivery.</p></div>
+<nav aria-label="Footer navigation" class="flex flex-wrap gap-3 font-bold">
+<a href="/" class="transition hover:text-foreground">Home</a>
+<a href="/posts" class="transition hover:text-foreground">Posts</a>
+<a href="/admin" class="transition hover:text-accent-400">Admin</a>
+</nav>
+</div>
+</footer>
+</div>
+</div>
+</body>
+</html>"#,
+        title = escape_html(&post.title),
+        category = escape_html(category_name),
+        category_href = escape_html(&category_href),
+        published_at = escape_html(&published_at),
+    )
+}
+
+async fn render_rich_body(
+    pool: &PgPool,
+    storage: &ObjectStorage,
+    body: &str,
+) -> Result<String, PublicPostsError> {
+    let mut sections = Vec::new();
+
+    for line in body.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Some(object_key) = parse_image_embed(line) {
+            sections.push(render_media_embed(pool, storage, object_key, "image").await?);
+        } else if let Some(object_key) = parse_video_embed(line) {
+            sections.push(render_media_embed(pool, storage, object_key, "video").await?);
+        } else if let Some(heading) = line.strip_prefix("### ") {
+            sections.push(format!(
+                r#"<h3 class="pt-4 text-2xl font-black leading-tight text-foreground">{}</h3>"#,
+                escape_html(heading)
+            ));
+        } else if let Some(heading) = line.strip_prefix("## ") {
+            sections.push(format!(
+                r#"<h2 class="pt-5 text-3xl font-black leading-tight text-foreground">{}</h2>"#,
+                escape_html(heading)
+            ));
+        } else if let Some(heading) = line.strip_prefix("# ") {
+            sections.push(format!(
+                r#"<h2 class="pt-5 text-3xl font-black leading-tight text-foreground">{}</h2>"#,
+                escape_html(heading)
+            ));
+        } else {
+            sections.push(format!(
+                r#"<p class="text-muted">{}</p>"#,
+                escape_html(line)
+            ));
+        }
+    }
+
+    if sections.is_empty() {
+        Ok(r#"<p class="text-muted">This post has no body content yet.</p>"#.to_owned())
+    } else {
+        Ok(sections.join(""))
+    }
+}
+
+async fn render_media_embed(
+    pool: &PgPool,
+    storage: &ObjectStorage,
+    object_key: &str,
+    expected_type: &str,
+) -> Result<String, PublicPostsError> {
+    let media = media::get_media_by_object_key(pool, object_key)
+        .await
+        .map_err(PublicPostsError::Database)?;
+    let Some(media) = media else {
+        return Ok(render_missing_media(object_key));
+    };
+
+    if media.media_type != expected_type {
+        return Ok(render_missing_media(object_key));
+    }
+
+    let signed_url = storage
+        .presigned_get_url(&media.object_key, PRESIGNED_MEDIA_TTL)
+        .await
+        .map_err(PublicPostsError::Storage)?;
+
+    if media.media_type == "video" {
+        Ok(format!(
+            r#"<figure class="overflow-hidden rounded-lg border border-white/10 bg-surface-900"><video class="aspect-video w-full bg-black" controls preload="metadata" src="{src}"></video></figure>"#,
+            src = escape_html(&signed_url),
+        ))
+    } else {
+        Ok(format!(
+            r#"<figure class="overflow-hidden rounded-lg border border-white/10 bg-surface-900"><img class="w-full object-cover" src="{src}" alt="" loading="lazy" /></figure>"#,
+            src = escape_html(&signed_url),
+        ))
+    }
+}
+
+fn render_missing_media(object_key: &str) -> String {
+    format!(
+        r#"<div class="rounded-lg border border-accent-500/40 bg-accent-500/10 p-4 text-sm font-bold text-accent-300">Embedded media is unavailable: {}</div>"#,
+        escape_html(object_key)
+    )
+}
+
+fn parse_image_embed(line: &str) -> Option<&str> {
+    parse_wrapped_token(line, "![media:", "]")
+}
+
+fn parse_video_embed(line: &str) -> Option<&str> {
+    parse_wrapped_token(line, "[video:", "]")
+}
+
+fn parse_wrapped_token<'a>(line: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {
+    let value = line.strip_prefix(prefix)?.strip_suffix(suffix)?.trim();
+    if value.is_empty() || value.starts_with('/') {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 fn render_pagination(current_page: i64, total_pages: i64, base_path: &str) -> String {
@@ -463,7 +684,7 @@ fn render_headline(headline: &str) -> String {
     }
 }
 
-fn render_not_found_page(message: &str) -> String {
+fn render_not_found_page(title: &str, message: &str) -> String {
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -477,13 +698,15 @@ fn render_not_found_page(message: &str) -> String {
 <main class="min-h-screen bg-background px-6 py-24 text-foreground sm:px-10">
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-4">
 <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">404</p>
-<h1 class="text-4xl font-black">Category not found</h1>
+<h1 class="text-4xl font-black">{title}</h1>
 <p class="text-muted">{message}</p>
 <a href="/posts" class="w-fit rounded-lg border border-accent-400/40 px-3 py-2 text-sm font-black text-accent-400 transition hover:bg-accent-500 hover:text-white">View all posts</a>
 </div>
 </main>
 </body>
-</html>"#
+</html>"#,
+        title = escape_html(title),
+        message = escape_html(message),
     )
 }
 
