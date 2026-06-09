@@ -40,6 +40,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/admin/login") view=LoginPage />
                         <ParentRoute path=path!("/admin") view=AdminLayout>
                             <Route path=path!("") view=AdminHome />
+                            <Route path=path!("subscribers") view=SubscribersPage />
                             <Route path=path!("posts/new") view=PostEditorPage />
                             <Route path=path!("posts/edit") view=PostEditorPage />
                         </ParentRoute>
@@ -84,15 +85,29 @@ fn AdminLayout() -> impl IntoView {
                     <a href="/" class="text-sm font-bold text-foreground">
                         "myClawTeam Blog"
                     </a>
-                    <ActionForm action=logout attr:class="m-0">
-                        <button
-                            class="rounded-lg border border-accent-400/50 px-3 py-2 text-sm font-bold text-accent-400 transition hover:bg-accent-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                            type="submit"
-                            disabled=move || logout_pending.get()
+                    <div class="flex flex-wrap items-center justify-end gap-2">
+                        <a
+                            class="rounded-lg px-3 py-2 text-sm font-bold text-muted transition hover:bg-white/5 hover:text-foreground"
+                            href="/admin"
                         >
-                            {move || if logout_pending.get() { "Signing out..." } else { "Sign out" }}
-                        </button>
-                    </ActionForm>
+                            "Dashboard"
+                        </a>
+                        <a
+                            class="rounded-lg px-3 py-2 text-sm font-bold text-muted transition hover:bg-white/5 hover:text-foreground"
+                            href="/admin/subscribers"
+                        >
+                            "Subscribers"
+                        </a>
+                        <ActionForm action=logout attr:class="m-0">
+                            <button
+                                class="rounded-lg border border-accent-400/50 px-3 py-2 text-sm font-bold text-accent-400 transition hover:bg-accent-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                                type="submit"
+                                disabled=move || logout_pending.get()
+                            >
+                                {move || if logout_pending.get() { "Signing out..." } else { "Sign out" }}
+                            </button>
+                        </ActionForm>
+                    </div>
                 </div>
             </header>
             <main class="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
@@ -294,6 +309,14 @@ fn AdminHome() -> impl IntoView {
             <section class="rounded-lg border border-white/10 bg-background/70 p-6">
                 <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Admin"</p>
                 <h1 class="mt-3 text-4xl font-black text-foreground">"Publishing workspace"</h1>
+                <div class="mt-5 flex flex-wrap gap-3">
+                    <a
+                        class="inline-flex items-center justify-center rounded-lg border border-white/10 px-4 py-3 text-sm font-bold text-foreground transition hover:border-accent-400 hover:text-accent-400"
+                        href="/admin/subscribers"
+                    >
+                        "View subscribers"
+                    </a>
+                </div>
             </section>
             <PostDashboard />
             <MediaPicker />
@@ -341,6 +364,51 @@ fn PostDashboard() -> impl IntoView {
                 </div>
             </div>
             <script src="/admin-posts.js" defer></script>
+        </section>
+    }
+}
+
+#[component]
+fn SubscribersPage() -> impl IntoView {
+    view! {
+        <section data-admin-subscribers class="rounded-lg border border-white/10 bg-background/70 p-6">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Subscribers"</p>
+                    <h1 class="mt-2 text-3xl font-black text-foreground">"Newsletter signups"</h1>
+                </div>
+                <a
+                    class="inline-flex items-center justify-center rounded-lg border border-white/10 px-4 py-3 text-sm font-bold text-foreground transition hover:border-accent-400 hover:text-accent-400"
+                    href="/admin"
+                >
+                    "Back to dashboard"
+                </a>
+            </div>
+            <p class="mt-3 max-w-2xl leading-7 text-muted">
+                "Collected email addresses from the Stay in the Loop form."
+            </p>
+            <p data-admin-subscribers-error class="mt-4 hidden rounded-lg border border-accent-500/40 bg-accent-500/10 px-3 py-2 text-sm font-bold text-accent-300"></p>
+            <div class="mt-6 overflow-hidden rounded-lg border border-white/10 bg-surface-900">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border-collapse text-left text-sm">
+                        <thead class="border-b border-white/10 bg-background/80 text-xs font-black uppercase tracking-wide text-muted">
+                            <tr>
+                                <th class="px-4 py-3">"Email"</th>
+                                <th class="px-4 py-3">"Signed up"</th>
+                                <th class="px-4 py-3 text-right">"Subscriber ID"</th>
+                            </tr>
+                        </thead>
+                        <tbody data-admin-subscribers-table class="divide-y divide-white/10">
+                            <tr>
+                                <td class="px-4 py-4 text-sm font-bold text-muted" colspan="3">
+                                    "Loading subscribers..."
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <script src="/admin-subscribers.js" defer></script>
         </section>
     }
 }

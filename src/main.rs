@@ -13,6 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use mike_t_4b46_mct_official_blog::{
         app::{App, shell},
         admin_posts,
+        admin_subscribers,
         auth,
         config::AppConfig,
         db,
@@ -55,6 +56,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/categories/{slug}", get(public_posts::category_index))
         .route("/api/posts/recent", get(public_posts::recent_posts))
         .route("/admin/api/categories", get(admin_posts::list_categories))
+        .route(
+            "/admin/api/subscribers",
+            get(admin_subscribers::list_subscribers),
+        )
         .route("/admin/api/media", get(uploads::list_media))
         .route(
             "/admin/api/media/upload",
