@@ -288,3 +288,70 @@ pub async fn list_published_posts_by_category(
     .fetch_all(pool)
     .await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn post_repository_crud_and_publish_filters(pool: PgPool) -> Result<()> {
+        let category = get_category_by_slug(&pool, "thoughts")
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)?;
+
+        let created = create_post(
+            &pool,
+            CreatePostInput {
+                title: "Repository Test Draft".to_owned(),
+                slug: "repository-test-draft".to_owned(),
+                body: "Draft body".to_owned(),
+                category_id: category.id,
+                status: PostStatus::Draft,
+            },
+        )
+        .await?;
+
+        assert_eq!(created.status, "draft");
+        assert!(created.published_at.is_none());
+
+        let by_slug = get_post_by_slug(&pool, "repository-test-draft")
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)?;
+        assert_eq!(by_slug.id, created.id);
+
+        let updated = update_post(
+            &pool,
+            created.id,
+            UpdatePostInput {
+                title: "Repository Test Published".to_owned(),
+                slug: "repository-test-published".to_owned(),
+                body: "Published body".to_owned(),
+                category_id: category.id,
+                status: PostStatus::Published,
+            },
+        )
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
+
+        assert_eq!(updated.status, "published");
+        assert_eq!(updated.slug, "repository-test-published");
+        assert!(updated.published_at.is_some());
+
+        let published = list_published_posts(&pool, 10, 0).await?;
+        assert!(published.iter().any(|post| post.id == created.id));
+
+        let filtered = list_published_posts_by_category(&pool, "thoughts", 10, 0).await?;
+        assert!(filtered.iter().any(|post| post.id == created.id));
+
+        let unpublished = set_post_status(&pool, created.id, PostStatus::Draft)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)?;
+        assert_eq!(unpublished.status, "draft");
+        assert!(unpublished.published_at.is_none());
+
+        assert!(delete_post(&pool, created.id).await?);
+        assert!(get_post_by_id(&pool, created.id).await?.is_none());
+
+        Ok(())
+    }
+}

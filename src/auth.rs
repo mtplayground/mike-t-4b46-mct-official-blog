@@ -252,3 +252,66 @@ fn parse_username(value: Option<&str>) -> Result<String, AuthError> {
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     left.len() == right.len() && bool::from(left.ct_eq(right))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn admin_config() -> AdminConfig {
+        AdminConfig {
+            username: "editor".to_owned(),
+            password: "correct-password".to_owned(),
+        }
+    }
+
+    fn session_config() -> SessionConfig {
+        SessionConfig {
+            secret: "test-session-secret-with-more-than-32-bytes".to_owned(),
+        }
+    }
+
+    #[test]
+    fn validate_admin_credentials_accepts_exact_match() {
+        let result = validate_admin_credentials(&admin_config(), "editor", "correct-password");
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_admin_credentials_rejects_wrong_password() {
+        let result = validate_admin_credentials(&admin_config(), "editor", "wrong-password");
+
+        assert!(matches!(result, Err(AuthError::InvalidCredentials)));
+    }
+
+    #[test]
+    fn admin_session_cookie_round_trips_through_cookie_header() -> Result<(), AuthError> {
+        let admin = admin_config();
+        let session = session_config();
+        let cookie = create_admin_session_cookie(&admin, &session)?;
+        let token = extract_cookie_value(&cookie, ADMIN_SESSION_COOKIE)
+            .ok_or(AuthError::InvalidSession)?;
+        let cookie_header = format!("theme=dark; {ADMIN_SESSION_COOKIE}={token}; other=value");
+
+        let verified = verify_admin_cookie_header(&admin, &session, &cookie_header)?;
+
+        assert_eq!(verified.username, admin.username);
+        assert!(verified.expires_at > verified.issued_at);
+
+        Ok(())
+    }
+
+    #[test]
+    fn admin_session_rejects_tampered_token() -> Result<(), AuthError> {
+        let admin = admin_config();
+        let session = session_config();
+        let mut token = create_admin_session_token(&admin, &session)?;
+        token.push('x');
+
+        let result = verify_admin_session_token(&admin, &session, &token);
+
+        assert!(matches!(result, Err(AuthError::InvalidSession)));
+
+        Ok(())
+    }
+}
