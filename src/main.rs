@@ -16,6 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         auth,
         config::AppConfig,
         db,
+        public_posts,
         storage::ObjectStorage,
         uploads,
     };
@@ -49,6 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
 
     let app = Router::new()
+        .route("/api/posts/recent", get(public_posts::recent_posts))
         .route("/admin/api/categories", get(admin_posts::list_categories))
         .route("/admin/api/media", get(uploads::list_media))
         .route(

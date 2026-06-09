@@ -153,42 +153,53 @@ fn HomePage() -> impl IntoView {
                         "By talking, serious delivery."
                     </p>
                     <h1 class="max-w-4xl text-display font-black leading-none text-foreground">
-                        "myClawTeam Blog"
+                        "myClawTeam "
+                        <span class="text-accent-400">"Blog"</span>
                     </h1>
                     <p class="max-w-2xl text-lead leading-8 text-muted">
-                        "Notes, progress, and announcements from the myClawTeam build."
+                        "Recent posts, field notes, and delivery updates from the myClawTeam build."
                     </p>
                 </div>
                 <aside class="rounded-lg border border-white/10 bg-surface-900 p-5 shadow-red-glow">
                     <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Now"</p>
-                    <p class="mt-3 text-2xl font-black text-foreground">"Signal from the workbench."</p>
-                    <p class="mt-3 leading-7 text-muted">"Thoughts, launches, and the small product decisions that compound."</p>
+                    <p class="mt-3 text-2xl font-black text-foreground">"Serious delivery, written down."</p>
+                    <p class="mt-3 leading-7 text-muted">"Featured notes and fresh posts surface here as soon as they are published."</p>
                 </aside>
             </section>
-            <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <PostCard
-                    category="Thoughts"
-                    title="The shape of useful momentum"
-                    excerpt="Short reflections on decisions, constraints, and work that keeps moving."
-                    meta="Draft lane"
-                    href="/"
-                />
-                <PostCard
-                    category="Product Progress"
-                    title="What shipped, what sharpened"
-                    excerpt="A running record of product movement from rough cut to sturdier release."
-                    meta="Build notes"
-                    href="/"
-                />
-                <PostCard
-                    category="Announcements"
-                    title="Updates worth calling out"
-                    excerpt="Launch notes and important changes for readers following the work."
-                    meta="News"
-                    href="/"
-                />
+            <section aria-labelledby="recent-posts-heading" class="flex flex-col gap-5">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Latest"</p>
+                        <h2 id="recent-posts-heading" class="text-3xl font-black text-foreground">"Recent and featured posts"</h2>
+                    </div>
+                    <p data-home-posts-status class="text-sm font-bold text-muted">"Loading published posts..."</p>
+                </div>
+                <div data-home-posts class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <PostCard
+                        category="Thoughts"
+                        title="The shape of useful momentum"
+                        excerpt="Short reflections on decisions, constraints, and work that keeps moving."
+                        meta="Featured"
+                        href="/"
+                    />
+                    <PostCard
+                        category="Product Progress"
+                        title="What shipped, what sharpened"
+                        excerpt="A running record of product movement from rough cut to sturdier release."
+                        meta="Build notes"
+                        href="/"
+                    />
+                    <PostCard
+                        category="Announcements"
+                        title="Updates worth calling out"
+                        excerpt="Launch notes and important changes for readers following the work."
+                        meta="News"
+                        href="/"
+                    />
+                </div>
             </section>
         </div>
+        <script src="/homepage.js" defer></script>
     }
 }
 
