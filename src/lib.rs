@@ -1,4 +1,5 @@
 pub mod app;
+pub mod post_functions;
 
 #[cfg(feature = "ssr")]
 pub mod auth;
