@@ -56,6 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/categories/{slug}", get(public_posts::category_index))
         .route("/sitemap.xml", get(public_posts::sitemap_xml))
         .route("/robots.txt", get(public_posts::robots_txt))
+        .route("/feed.xml", get(public_posts::rss_feed))
+        .route("/rss.xml", get(public_posts::rss_feed))
         .route("/api/posts/recent", get(public_posts::recent_posts))
         .route("/admin/api/categories", get(admin_posts::list_categories))
         .route(
