@@ -149,9 +149,68 @@ fn HomePage() -> impl IntoView {
 #[component]
 fn AdminHome() -> impl IntoView {
     view! {
-        <section class="rounded-lg border border-white/10 bg-background/70 p-6">
-            <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Admin"</p>
-            <h1 class="mt-3 text-4xl font-black text-foreground">"Publishing workspace"</h1>
+        <div class="flex flex-col gap-8">
+            <section class="rounded-lg border border-white/10 bg-background/70 p-6">
+                <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Admin"</p>
+                <h1 class="mt-3 text-4xl font-black text-foreground">"Publishing workspace"</h1>
+            </section>
+            <MediaPicker />
+        </div>
+    }
+}
+
+#[component]
+fn MediaPicker() -> impl IntoView {
+    view! {
+        <section data-media-picker class="rounded-lg border border-white/10 bg-background/70 p-6">
+            <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Media"</p>
+                    <h2 class="mt-2 text-2xl font-black text-foreground">"Library"</h2>
+                </div>
+                <form
+                    data-media-upload-form
+                    class="flex w-full flex-col gap-3 rounded-lg border border-white/10 bg-surface-900 p-4 lg:max-w-sm"
+                    enctype="multipart/form-data"
+                >
+                    <label class="flex flex-col gap-2 text-sm font-bold text-foreground">
+                        "Upload"
+                        <input
+                            class="rounded-lg border border-white/10 bg-background px-3 py-3 text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-accent-500 file:px-3 file:py-2 file:text-sm file:font-black file:text-white"
+                            type="file"
+                            name="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp,image/avif,video/mp4,video/webm,video/quicktime"
+                            required
+                        />
+                    </label>
+                    <button
+                        class="rounded-lg bg-accent-500 px-4 py-3 text-sm font-black text-white transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        type="submit"
+                    >
+                        "Upload"
+                    </button>
+                    <p data-media-error class="hidden rounded-lg border border-accent-500/40 bg-accent-500/10 px-3 py-2 text-sm font-bold text-accent-300"></p>
+                </form>
+            </div>
+
+            <div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div data-media-grid class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div class="rounded-lg border border-white/10 bg-surface-900 p-4 text-sm font-bold text-muted">
+                        "Loading media..."
+                    </div>
+                </div>
+                <aside class="rounded-lg border border-white/10 bg-surface-900 p-4">
+                    <label class="flex flex-col gap-3 text-sm font-bold text-foreground">
+                        "Selected embed"
+                        <textarea
+                            data-media-selected
+                            class="min-h-32 resize-y rounded-lg border border-white/10 bg-background px-3 py-3 font-mono text-sm font-normal text-foreground outline-none transition focus:border-accent-400"
+                            readonly
+                        ></textarea>
+                    </label>
+                </aside>
+            </div>
+            <script src="/media-picker.js" defer></script>
         </section>
     }
 }

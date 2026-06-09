@@ -43,6 +43,34 @@ pub struct UploadResponse {
     pub size_bytes: i64,
 }
 
+pub async fn list_media(
+    Extension(pool): Extension<PgPool>,
+    Extension(storage): Extension<ObjectStorage>,
+) -> Result<Json<Vec<UploadResponse>>, UploadError> {
+    let media = media::list_media(&pool, 60, 0)
+        .await
+        .map_err(UploadError::Database)?;
+    let mut response = Vec::with_capacity(media.len());
+
+    for item in media {
+        let object_url = storage
+            .presigned_get_url(&item.object_key, PRESIGNED_URL_TTL)
+            .await
+            .map_err(UploadError::Storage)?;
+
+        response.push(UploadResponse {
+            id: item.id,
+            object_key: item.object_key,
+            object_url,
+            media_type: item.media_type,
+            content_type: item.content_type,
+            size_bytes: item.size_bytes,
+        });
+    }
+
+    Ok(Json(response))
+}
+
 #[derive(Debug)]
 pub enum UploadError {
     MissingFile,
