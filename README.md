@@ -21,6 +21,10 @@ PostgreSQL, runs migrations from `migrations/`, and verifies connectivity with
 
 All runtime configuration is read through a typed server-side config loader.
 Required variables are documented in `.env.example`.
+Object Storage uses the vendor-neutral `OBJECT_STORAGE_*` variables and always
+prepends `OBJECT_STORAGE_PREFIX` before S3 operations. Browser-facing object
+reads should use presigned GET URLs from the storage helper because the bucket is
+private.
 
 Tailwind is wired through cargo-leptos with `style/tailwind.css` as the input file.
 For standalone CSS checks, use:
