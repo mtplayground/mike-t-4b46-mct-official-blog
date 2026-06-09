@@ -50,6 +50,11 @@ pub struct PostFormInput {
     pub status: String,
 }
 
+#[derive(Deserialize)]
+pub struct PostStatusInput {
+    pub published: bool,
+}
+
 #[derive(Serialize)]
 pub struct DeletePostResponse {
     pub deleted: bool,
@@ -178,6 +183,25 @@ pub async fn update_post(
     .await
     .map_err(AdminPostsError::WriteDatabase)?
     .ok_or(AdminPostsError::NotFound)?;
+
+    Ok(Json(post_to_detail(post)))
+}
+
+pub async fn set_post_status(
+    Extension(pool): Extension<PgPool>,
+    Path(id): Path<i64>,
+    Json(input): Json<PostStatusInput>,
+) -> Result<Json<PostDetail>, AdminPostsError> {
+    let id = validate_post_id(id)?;
+    let status = if input.published {
+        PostStatus::Published
+    } else {
+        PostStatus::Draft
+    };
+    let post = posts::set_post_status(&pool, id, status)
+        .await
+        .map_err(AdminPostsError::WriteDatabase)?
+        .ok_or(AdminPostsError::NotFound)?;
 
     Ok(Json(post_to_detail(post)))
 }

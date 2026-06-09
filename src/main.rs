@@ -5,7 +5,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Extension, Router,
         extract::DefaultBodyLimit,
         middleware,
-        routing::{get, post},
+        routing::{get, post, put},
     };
     use leptos::logging::log;
     use leptos::prelude::*;
@@ -65,6 +65,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             get(admin_posts::get_post)
                 .put(admin_posts::update_post)
                 .delete(admin_posts::delete_post),
+        )
+        .route(
+            "/admin/api/posts/{id}/status",
+            put(admin_posts::set_post_status),
         )
         .leptos_routes_with_context(&leptos_options, routes, provide_db_context, render_shell)
         .fallback(leptos_axum::file_and_error_handler(shell))
