@@ -5,6 +5,9 @@ pub mod post_functions;
 pub mod admin_posts;
 
 #[cfg(feature = "ssr")]
+pub mod admin_subscribers;
+
+#[cfg(feature = "ssr")]
 pub mod auth;
 
 #[cfg(feature = "ssr")]
