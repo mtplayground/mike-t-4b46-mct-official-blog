@@ -40,6 +40,8 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/admin/login") view=LoginPage />
                         <ParentRoute path=path!("/admin") view=AdminLayout>
                             <Route path=path!("") view=AdminHome />
+                            <Route path=path!("posts/new") view=PostEditorPage />
+                            <Route path=path!("posts/edit") view=PostEditorPage />
                         </ParentRoute>
                     </Routes>
                 </ErrorBoundary>
@@ -200,6 +202,116 @@ fn PostDashboard() -> impl IntoView {
                 </div>
             </div>
             <script src="/admin-posts.js" defer></script>
+        </section>
+    }
+}
+
+#[component]
+fn PostEditorPage() -> impl IntoView {
+    view! {
+        <section data-post-editor class="rounded-lg border border-white/10 bg-background/70 p-6">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Posts"</p>
+                    <h1 data-post-editor-heading class="mt-2 text-3xl font-black text-foreground">"New post"</h1>
+                </div>
+                <a
+                    class="inline-flex items-center justify-center rounded-lg border border-white/10 px-4 py-3 text-sm font-bold text-foreground transition hover:border-accent-400 hover:text-accent-400"
+                    href="/admin"
+                >
+                    "Back"
+                </a>
+            </div>
+
+            <p data-post-editor-error class="mt-4 hidden rounded-lg border border-accent-500/40 bg-accent-500/10 px-3 py-2 text-sm font-bold text-accent-300"></p>
+            <p data-post-editor-status class="mt-4 hidden rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-2 text-sm font-bold text-emerald-300"></p>
+
+            <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <form data-post-editor-form class="flex flex-col gap-5 rounded-lg border border-white/10 bg-surface-900 p-5">
+                    <label class="flex flex-col gap-2 text-sm font-bold text-foreground">
+                        "Title"
+                        <input
+                            data-post-title
+                            class="rounded-lg border border-white/10 bg-background px-3 py-3 text-base text-foreground outline-none transition placeholder:text-muted focus:border-accent-400"
+                            type="text"
+                            name="title"
+                            maxlength="220"
+                            required
+                        />
+                    </label>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <label class="flex flex-col gap-2 text-sm font-bold text-foreground">
+                            "Category"
+                            <select
+                                data-post-category
+                                class="rounded-lg border border-white/10 bg-background px-3 py-3 text-base text-foreground outline-none transition focus:border-accent-400"
+                                name="category_id"
+                                required
+                            >
+                                <option value="">"Loading..."</option>
+                            </select>
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-bold text-foreground">
+                            "Status"
+                            <select
+                                data-post-status
+                                class="rounded-lg border border-white/10 bg-background px-3 py-3 text-base text-foreground outline-none transition focus:border-accent-400"
+                                name="status"
+                            >
+                                <option value="draft">"Draft"</option>
+                                <option value="published">"Published"</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <label class="flex flex-col gap-2 text-sm font-bold text-foreground">
+                        "Body"
+                        <textarea
+                            data-post-body
+                            class="min-h-96 resize-y rounded-lg border border-white/10 bg-background px-3 py-3 font-mono text-sm font-normal leading-6 text-foreground outline-none transition focus:border-accent-400"
+                            name="body"
+                        ></textarea>
+                    </label>
+
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                        <button
+                            class="rounded-lg bg-accent-500 px-4 py-3 text-sm font-black text-white transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-60"
+                            type="submit"
+                        >
+                            "Save"
+                        </button>
+                    </div>
+                </form>
+
+                <aside class="flex flex-col gap-5 rounded-lg border border-white/10 bg-surface-900 p-5">
+                    <div>
+                        <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Media"</p>
+                        <h2 class="mt-2 text-xl font-black text-foreground">"Embed"</h2>
+                    </div>
+                    <form data-post-media-upload class="flex flex-col gap-3" enctype="multipart/form-data">
+                        <input
+                            class="rounded-lg border border-white/10 bg-background px-3 py-3 text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-accent-500 file:px-3 file:py-2 file:text-sm file:font-black file:text-white"
+                            type="file"
+                            name="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp,image/avif,video/mp4,video/webm,video/quicktime"
+                            required
+                        />
+                        <button
+                            class="rounded-lg border border-accent-400/50 px-3 py-2 text-sm font-black text-accent-400 transition hover:bg-accent-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            type="submit"
+                        >
+                            "Upload"
+                        </button>
+                    </form>
+                    <div data-post-media-grid class="grid grid-cols-1 gap-3">
+                        <div class="rounded-lg border border-white/10 bg-background p-4 text-sm font-bold text-muted">
+                            "Loading media..."
+                        </div>
+                    </div>
+                </aside>
+            </div>
+            <script src="/post-editor.js" defer></script>
         </section>
     }
 }
