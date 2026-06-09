@@ -43,6 +43,7 @@ output-name = "mike-t-4b46-mct-official-blog"
 site-root = "target/site"
 site-pkg-dir = "pkg"
 style-file = "style/main.css"
+tailwind-input-file = "style/tailwind.css"
 assets-dir = "public"
 site-addr = "0.0.0.0:8080"
 reload-port = 3001
