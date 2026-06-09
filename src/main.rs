@@ -1,7 +1,7 @@
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use axum::{Router, middleware};
+    use axum::{Extension, Router, extract::DefaultBodyLimit, middleware, routing::post};
     use leptos::logging::log;
     use leptos::prelude::*;
     use leptos_axum::{LeptosRoutes, generate_route_list};
@@ -11,6 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         config::AppConfig,
         db,
         storage::ObjectStorage,
+        uploads,
     };
 
     let app_config = AppConfig::from_env()?;
@@ -42,8 +43,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
 
     let app = Router::new()
+        .route(
+            "/admin/api/media/upload",
+            post(uploads::upload_media)
+                .layer(DefaultBodyLimit::max(uploads::MAX_MULTIPART_BYTES)),
+        )
         .leptos_routes_with_context(&leptos_options, routes, provide_db_context, render_shell)
         .fallback(leptos_axum::file_and_error_handler(shell))
+        .layer(Extension(db_pool.clone()))
+        .layer(Extension(object_storage.clone()))
         .layer(middleware::from_fn_with_state(
             app_config.clone(),
             auth::require_admin_session,
