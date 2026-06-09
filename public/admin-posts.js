@@ -185,7 +185,7 @@
     setError("");
     const response = await fetch("/admin/api/posts", { credentials: "same-origin" });
     if (!response.ok) {
-      throw new Error("Could not load posts.");
+      throw new Error(await readError(response, "Could not load posts."));
     }
 
     renderPosts(await response.json());

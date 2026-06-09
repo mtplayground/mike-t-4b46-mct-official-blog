@@ -45,6 +45,15 @@
     return cell;
   };
 
+  const readError = async (response, fallback) => {
+    try {
+      const payload = await response.json();
+      return payload.error || fallback;
+    } catch (_error) {
+      return fallback;
+    }
+  };
+
   const renderEmpty = () => {
     const row = document.createElement("tr");
     const cell = createCell("px-4 py-6 text-sm font-bold text-muted");
@@ -86,7 +95,7 @@
     });
 
     if (!response.ok) {
-      throw new Error("Could not load subscribers.");
+      throw new Error(await readError(response, "Could not load subscribers."));
     }
 
     renderSubscribers(await response.json());

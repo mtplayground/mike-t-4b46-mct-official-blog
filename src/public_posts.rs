@@ -67,6 +67,7 @@ pub struct PaginationQuery {
 #[derive(Debug)]
 pub enum PublicPostsError {
     Database(sqlx::Error),
+    RecentPostsDatabase(sqlx::Error),
     Storage(StorageError),
     PostNotFound(String),
     CategoryNotFound(String),
@@ -76,6 +77,7 @@ impl fmt::Display for PublicPostsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Database(_) => write!(f, "failed to load public posts"),
+            Self::RecentPostsDatabase(_) => write!(f, "failed to load recent posts"),
             Self::Storage(_) => write!(f, "failed to sign embedded media"),
             Self::PostNotFound(slug) => write!(f, "post not found: {slug}"),
             Self::CategoryNotFound(slug) => write!(f, "category filter not found: {slug}"),
@@ -86,7 +88,7 @@ impl fmt::Display for PublicPostsError {
 impl Error for PublicPostsError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Database(error) => Some(error),
+            Self::Database(error) | Self::RecentPostsDatabase(error) => Some(error),
             Self::Storage(error) => Some(error),
             Self::PostNotFound(_) => None,
             Self::CategoryNotFound(_) => None,
@@ -98,11 +100,19 @@ impl IntoResponse for PublicPostsError {
     fn into_response(self) -> Response {
         eprintln!("public posts error: {self:?}");
         match self {
-            Self::Database(_) | Self::Storage(_) => (
+            Self::RecentPostsDatabase(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorMessage {
                     error: "Could not load recent posts. Please try again.",
                 }),
+            )
+                .into_response(),
+            Self::Database(_) | Self::Storage(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(render_error_page(
+                    "Could not load content",
+                    "The page could not be loaded. Please try again.",
+                )),
             )
                 .into_response(),
             Self::CategoryNotFound(slug) => (
@@ -130,7 +140,7 @@ pub async fn recent_posts(
 ) -> Result<Json<Vec<PublicPostCard>>, PublicPostsError> {
     let categories = posts::list_categories(&pool)
         .await
-        .map_err(PublicPostsError::Database)?;
+        .map_err(PublicPostsError::RecentPostsDatabase)?;
     let category_names = categories
         .into_iter()
         .map(|category| (category.id, category.name))
@@ -138,7 +148,7 @@ pub async fn recent_posts(
 
     let recent_posts = posts::list_published_posts(&pool, RECENT_POST_LIMIT, 0)
         .await
-        .map_err(PublicPostsError::Database)?;
+        .map_err(PublicPostsError::RecentPostsDatabase)?;
 
     let cards = recent_posts
         .into_iter()
@@ -933,28 +943,45 @@ fn render_headline(headline: &str) -> String {
 }
 
 fn render_not_found_page(title: &str, message: &str) -> String {
+    render_status_page("404", title, message, "View all posts", "/posts")
+}
+
+fn render_error_page(title: &str, message: &str) -> String {
+    render_status_page("Error", title, message, "Return home", "/")
+}
+
+fn render_status_page(
+    eyebrow: &str,
+    title: &str,
+    message: &str,
+    link_label: &str,
+    link_href: &str,
+) -> String {
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Not found | myClawTeam Blog</title>
+<title>{title} | myClawTeam Blog</title>
 <link rel="stylesheet" href="/pkg/mike-t-4b46-mct-official-blog.css" />
 </head>
 <body>
 <main class="min-h-screen bg-background px-6 py-24 text-foreground sm:px-10">
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-4">
-<p class="text-kicker font-bold uppercase tracking-wide text-accent-400">404</p>
+<p class="text-kicker font-bold uppercase tracking-wide text-accent-400">{eyebrow}</p>
 <h1 class="text-4xl font-black">{title}</h1>
 <p class="text-muted">{message}</p>
-<a href="/posts" class="w-fit rounded-lg border border-accent-400/40 px-3 py-2 text-sm font-black text-accent-400 transition hover:bg-accent-500 hover:text-white">View all posts</a>
+<a href="{link_href}" class="w-fit rounded-lg border border-accent-400/40 px-3 py-2 text-sm font-black text-accent-400 transition hover:bg-accent-500 hover:text-white">{link_label}</a>
 </div>
 </main>
 </body>
 </html>"#,
+        eyebrow = escape_html(eyebrow),
         title = escape_html(title),
         message = escape_html(message),
+        link_label = escape_html(link_label),
+        link_href = escape_html(link_href),
     )
 }
 

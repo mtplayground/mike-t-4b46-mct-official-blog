@@ -250,9 +250,13 @@
     }
   });
 
+  setStatus("Loading editor...");
+
   Promise.all([loadCategories(), loadMedia()])
     .then(loadPost)
+    .then(() => setStatus(""))
     .catch((error) => {
+      setStatus("");
       setError(error instanceof Error ? error.message : "Could not load editor.");
     });
 })();
