@@ -1,7 +1,12 @@
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use axum::{Extension, Router, extract::DefaultBodyLimit, middleware, routing::post};
+    use axum::{
+        Extension, Router,
+        extract::DefaultBodyLimit,
+        middleware,
+        routing::{get, post},
+    };
     use leptos::logging::log;
     use leptos::prelude::*;
     use leptos_axum::{LeptosRoutes, generate_route_list};
@@ -43,6 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
 
     let app = Router::new()
+        .route("/admin/api/media", get(uploads::list_media))
         .route(
             "/admin/api/media/upload",
             post(uploads::upload_media)
