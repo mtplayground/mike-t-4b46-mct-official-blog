@@ -5,11 +5,12 @@ use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 
+use crate::config::DatabaseConfig;
+
 const DEFAULT_MAX_CONNECTIONS: u32 = 5;
 
 #[derive(Debug)]
 pub enum DbError {
-    MissingDatabaseUrl(std::env::VarError),
     InvalidDatabaseUrl(sqlx::Error),
     Connect(sqlx::Error),
     Migrate(sqlx::migrate::MigrateError),
@@ -19,7 +20,6 @@ pub enum DbError {
 impl fmt::Display for DbError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingDatabaseUrl(_) => write!(f, "DATABASE_URL environment variable is not set"),
             Self::InvalidDatabaseUrl(_) => write!(f, "DATABASE_URL is not a valid Postgres URL"),
             Self::Connect(_) => write!(f, "failed to connect to Postgres"),
             Self::Migrate(_) => write!(f, "failed to run database migrations"),
@@ -31,7 +31,6 @@ impl fmt::Display for DbError {
 impl Error for DbError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::MissingDatabaseUrl(error) => Some(error),
             Self::InvalidDatabaseUrl(error) => Some(error),
             Self::Connect(error) => Some(error),
             Self::Migrate(error) => Some(error),
@@ -40,12 +39,11 @@ impl Error for DbError {
     }
 }
 
-pub async fn connect_from_env() -> Result<PgPool, DbError> {
-    let database_url = std::env::var("DATABASE_URL").map_err(DbError::MissingDatabaseUrl)?;
-    connect(&database_url).await
+pub async fn connect(config: &DatabaseConfig) -> Result<PgPool, DbError> {
+    connect_with_url(&config.url).await
 }
 
-pub async fn connect(database_url: &str) -> Result<PgPool, DbError> {
+pub async fn connect_with_url(database_url: &str) -> Result<PgPool, DbError> {
     let options = PgConnectOptions::from_str(database_url)
         .map_err(DbError::InvalidDatabaseUrl)?
         .statement_cache_capacity(0);

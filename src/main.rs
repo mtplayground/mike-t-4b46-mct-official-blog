@@ -7,14 +7,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use leptos_axum::{LeptosRoutes, generate_route_list};
     use mike_t_4b46_mct_official_blog::{
         app::{App, shell},
+        config::AppConfig,
         db,
     };
 
+    let app_config = AppConfig::from_env()?;
     let conf = get_configuration(None)?;
     let addr = conf.leptos_options.site_addr;
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
-    let db_pool = db::connect_from_env().await?;
+    let db_pool = db::connect(&app_config.database).await?;
 
     db::run_migrations(&db_pool).await?;
     db::verify_connectivity(&db_pool).await?;
@@ -22,8 +24,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let provide_db_context = {
         let db_pool = db_pool.clone();
+        let app_config = app_config.clone();
         move || {
             provide_context(db_pool.clone());
+            provide_context(app_config.clone());
         }
     };
     let render_shell = {
