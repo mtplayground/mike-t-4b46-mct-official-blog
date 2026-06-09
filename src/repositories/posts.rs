@@ -221,6 +221,19 @@ pub async fn list_published_posts(pool: &PgPool, limit: i64, offset: i64) -> Res
     .await
 }
 
+pub async fn list_all_published_posts(pool: &PgPool) -> Result<Vec<Post>> {
+    sqlx::query_as::<_, Post>(
+        r#"
+        SELECT id, category_id, title, slug, body, status, published_at, created_at, updated_at
+        FROM posts
+        WHERE status = 'published'
+        ORDER BY published_at DESC, id DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+}
+
 pub async fn count_published_posts(pool: &PgPool) -> Result<i64> {
     sqlx::query_scalar::<_, i64>(
         r#"

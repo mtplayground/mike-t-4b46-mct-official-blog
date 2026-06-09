@@ -3,7 +3,7 @@ use std::{collections::HashMap, error::Error, fmt, time::Duration};
 use axum::{
     Extension, Html, Json,
     extract::{Path, Query},
-    http::StatusCode,
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
@@ -155,6 +155,29 @@ pub async fn recent_posts(
         .collect();
 
     Ok(Json(cards))
+}
+
+pub async fn sitemap_xml(
+    Extension(pool): Extension<PgPool>,
+) -> Result<Response, PublicPostsError> {
+    let posts = posts::list_all_published_posts(&pool)
+        .await
+        .map_err(PublicPostsError::Database)?;
+
+    let body = render_sitemap_xml(&posts);
+
+    Ok((
+        [(header::CONTENT_TYPE, "application/xml; charset=utf-8")],
+        body,
+    )
+        .into_response())
+}
+
+pub async fn robots_txt() -> Response {
+    let sitemap_url = absolute_url("/sitemap.xml");
+    let body = format!("User-agent: *\nAllow: /\nSitemap: {sitemap_url}\n");
+
+    ([(header::CONTENT_TYPE, "text/plain; charset=utf-8")], body).into_response()
 }
 
 pub async fn posts_index(
@@ -683,6 +706,58 @@ fn pagination_path(base_path: &str, page: i64) -> String {
     }
 }
 
+fn render_sitemap_xml(posts: &[posts::Post]) -> String {
+    let mut urls = vec![
+        sitemap_url("/", "daily", "0.9", None),
+        sitemap_url("/posts", "daily", "0.8", None),
+    ];
+
+    urls.extend(CATEGORY_FILTERS.iter().map(|category| {
+        let path = format!("/categories/{}", category.slug);
+        sitemap_url(&path, "weekly", "0.7", None)
+    }));
+
+    urls.extend(posts.iter().map(|post| {
+        let path = format!("/posts/{}", post.slug);
+        let last_modified = post
+            .updated_at
+            .to_string()
+            .chars()
+            .take(10)
+            .collect::<String>();
+
+        sitemap_url(&path, "weekly", "0.8", Some(&last_modified))
+    }));
+
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{}
+</urlset>
+"#,
+        urls.join("")
+    )
+}
+
+fn sitemap_url(
+    path: &str,
+    changefreq: &str,
+    priority: &str,
+    last_modified: Option<&str>,
+) -> String {
+    let lastmod = last_modified
+        .map(|value| format!("<lastmod>{}</lastmod>\n", escape_xml(value)))
+        .unwrap_or_default();
+
+    format!(
+        "<url>\n<loc>{}</loc>\n{}<changefreq>{}</changefreq>\n<priority>{}</priority>\n</url>\n",
+        escape_xml(&absolute_url(path)),
+        lastmod,
+        escape_xml(changefreq),
+        escape_xml(priority),
+    )
+}
+
 fn disabled_pagination_label(label: &str) -> String {
     format!(
         r#"<span class="rounded-lg border border-white/5 px-3 py-2 text-sm font-black text-muted opacity-50">{}</span>"#,
@@ -822,4 +897,8 @@ fn escape_html(value: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#39;")
+}
+
+fn escape_xml(value: &str) -> String {
+    escape_html(value)
 }
