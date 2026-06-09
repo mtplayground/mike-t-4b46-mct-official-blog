@@ -2,7 +2,7 @@ use std::{collections::HashMap, error::Error, fmt};
 
 use axum::{
     Extension, Html, Json,
-    extract::Query,
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -14,6 +14,30 @@ use crate::repositories::posts;
 const RECENT_POST_LIMIT: i64 = 6;
 const POSTS_PER_PAGE: i64 = 9;
 const EXCERPT_CHAR_LIMIT: usize = 160;
+const CATEGORY_FILTERS: [CategoryFilter; 3] = [
+    CategoryFilter {
+        slug: "thoughts",
+        name: "Thoughts",
+        description: "Notes and reflections from the myClawTeam team.",
+    },
+    CategoryFilter {
+        slug: "product-progress",
+        name: "Product Progress",
+        description: "Updates on what is changing and shipping.",
+    },
+    CategoryFilter {
+        slug: "announcements",
+        name: "Announcements",
+        description: "Official news and milestones.",
+    },
+];
+
+#[derive(Clone, Copy, Debug)]
+struct CategoryFilter {
+    slug: &'static str,
+    name: &'static str,
+    description: &'static str,
+}
 
 #[derive(Debug, Serialize)]
 pub struct PublicPostCard {
@@ -37,12 +61,14 @@ pub struct PaginationQuery {
 #[derive(Debug)]
 pub enum PublicPostsError {
     Database(sqlx::Error),
+    CategoryNotFound(String),
 }
 
 impl fmt::Display for PublicPostsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Database(_) => write!(f, "failed to load public posts"),
+            Self::CategoryNotFound(slug) => write!(f, "category filter not found: {slug}"),
         }
     }
 }
@@ -51,6 +77,7 @@ impl Error for PublicPostsError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Database(error) => Some(error),
+            Self::CategoryNotFound(_) => None,
         }
     }
 }
@@ -58,13 +85,23 @@ impl Error for PublicPostsError {
 impl IntoResponse for PublicPostsError {
     fn into_response(self) -> Response {
         eprintln!("public posts error: {self:?}");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorMessage {
-                error: "Could not load recent posts. Please try again.",
-            }),
-        )
-            .into_response()
+        match self {
+            Self::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorMessage {
+                    error: "Could not load recent posts. Please try again.",
+                }),
+            )
+                .into_response(),
+            Self::CategoryNotFound(slug) => (
+                StatusCode::NOT_FOUND,
+                Html(render_not_found_page(&format!(
+                    "Category filter '{}' was not found.",
+                    escape_html(&slug)
+                ))),
+            )
+                .into_response(),
+        }
     }
 }
 
@@ -129,6 +166,57 @@ pub async fn posts_index(
         current_page,
         total_pages,
         total_posts,
+        "Posts | myClawTeam Blog",
+        "Published posts",
+        "myClawTeam Blog",
+        "A paginated archive of published notes, updates, and delivery writeups.",
+        "/posts",
+        None,
+    )))
+}
+
+pub async fn category_index(
+    Extension(pool): Extension<PgPool>,
+    Path(slug): Path<String>,
+    Query(query): Query<PaginationQuery>,
+) -> Result<Html<String>, PublicPostsError> {
+    let category =
+        allowed_category(&slug).ok_or_else(|| PublicPostsError::CategoryNotFound(slug.clone()))?;
+    let total_posts = posts::count_published_posts_by_category(&pool, category.slug)
+        .await
+        .map_err(PublicPostsError::Database)?;
+    let total_pages = total_pages(total_posts);
+    let current_page = normalize_page(query.page, total_pages);
+    let offset = (current_page - 1) * POSTS_PER_PAGE;
+
+    let categories = posts::list_categories(&pool)
+        .await
+        .map_err(PublicPostsError::Database)?;
+    let category_names = categories
+        .into_iter()
+        .map(|category| (category.id, category.name))
+        .collect::<HashMap<_, _>>();
+
+    let published_posts =
+        posts::list_published_posts_by_category(&pool, category.slug, POSTS_PER_PAGE, offset)
+            .await
+            .map_err(PublicPostsError::Database)?;
+    let page_title = format!("{} | myClawTeam Blog", category.name);
+    let headline = format!("{} posts", category.name);
+    let base_path = format!("/categories/{}", category.slug);
+
+    Ok(Html(render_posts_page(
+        &published_posts,
+        &category_names,
+        current_page,
+        total_pages,
+        total_posts,
+        &page_title,
+        "Category filter",
+        &headline,
+        category.description,
+        &base_path,
+        Some(category.slug),
     )))
 }
 
@@ -165,6 +253,12 @@ fn render_posts_page(
     current_page: i64,
     total_pages: i64,
     total_posts: i64,
+    title: &str,
+    eyebrow: &str,
+    headline: &str,
+    description: &str,
+    base_path: &str,
+    active_category: Option<&str>,
 ) -> String {
     let cards = if posts.is_empty() {
         r#"<div class="rounded-lg border border-white/10 bg-surface-900 p-6 text-muted">No published posts yet.</div>"#
@@ -176,7 +270,8 @@ fn render_posts_page(
             .collect::<Vec<_>>()
             .join("")
     };
-    let pagination = render_pagination(current_page, total_pages);
+    let pagination = render_pagination(current_page, total_pages, base_path);
+    let category_filters = render_category_filters(active_category);
 
     format!(
         r#"<!DOCTYPE html>
@@ -184,7 +279,7 @@ fn render_posts_page(
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Posts | myClawTeam Blog</title>
+<title>{title}</title>
 <link rel="stylesheet" href="/pkg/mike-t-4b46-mct-official-blog.css" />
 </head>
 <body>
@@ -206,10 +301,11 @@ fn render_posts_page(
 <main id="content" class="flex-1">
 <div class="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-16 sm:px-10 lg:py-20">
 <section class="flex flex-col gap-5">
-<p class="text-kicker font-bold uppercase tracking-wide text-accent-400">Published posts</p>
-<h1 class="max-w-4xl text-display font-black leading-none text-foreground">myClawTeam <span class="text-accent-400">Blog</span></h1>
-<p class="max-w-2xl text-lead leading-8 text-muted">A paginated archive of published notes, updates, and delivery writeups.</p>
+<p class="text-kicker font-bold uppercase tracking-wide text-accent-400">{eyebrow}</p>
+<h1 class="max-w-4xl text-display font-black leading-none text-foreground">{headline}</h1>
+<p class="max-w-2xl text-lead leading-8 text-muted">{description}</p>
 <p class="text-sm font-bold text-muted">{total_posts} published posts &middot; Page {current_page} of {total_pages}</p>
+{category_filters}
 </section>
 <section aria-label="Published post list" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{cards}</section>
 {pagination}
@@ -228,7 +324,11 @@ fn render_posts_page(
 </div>
 </div>
 </body>
-</html>"#
+</html>"#,
+        title = escape_html(title),
+        eyebrow = escape_html(eyebrow),
+        headline = render_headline(headline),
+        description = escape_html(description),
     )
 }
 
@@ -265,23 +365,23 @@ fn render_post_card(post: &posts::Post, category_names: &HashMap<i64, String>) -
     )
 }
 
-fn render_pagination(current_page: i64, total_pages: i64) -> String {
+fn render_pagination(current_page: i64, total_pages: i64, base_path: &str) -> String {
     if total_pages <= 1 {
         return String::new();
     }
 
     let previous = if current_page > 1 {
-        pagination_link(current_page - 1, "Previous", false)
+        pagination_link(base_path, current_page - 1, "Previous", false)
     } else {
         disabled_pagination_label("Previous")
     };
     let next = if current_page < total_pages {
-        pagination_link(current_page + 1, "Next", false)
+        pagination_link(base_path, current_page + 1, "Next", false)
     } else {
         disabled_pagination_label("Next")
     };
     let pages = (1..=total_pages)
-        .map(|page| pagination_link(page, &page.to_string(), page == current_page))
+        .map(|page| pagination_link(base_path, page, &page.to_string(), page == current_page))
         .collect::<Vec<_>>()
         .join("");
 
@@ -293,7 +393,7 @@ fn render_pagination(current_page: i64, total_pages: i64) -> String {
     )
 }
 
-fn pagination_link(page: i64, label: &str, current: bool) -> String {
+fn pagination_link(base_path: &str, page: i64, label: &str, current: bool) -> String {
     let class = if current {
         "rounded-lg bg-accent-500 px-3 py-2 text-sm font-black text-white"
     } else {
@@ -302,7 +402,8 @@ fn pagination_link(page: i64, label: &str, current: bool) -> String {
     let aria_current = if current { r#" aria-current="page""# } else { "" };
 
     format!(
-        r#"<a href="/posts?page={page}" class="{class}"{aria_current}>{label}</a>"#,
+        r#"<a href="{base_path}?page={page}" class="{class}"{aria_current}>{label}</a>"#,
+        base_path = escape_html(base_path),
         label = escape_html(label),
     )
 }
@@ -316,6 +417,74 @@ fn disabled_pagination_label(label: &str) -> String {
 
 fn first_date_chars(value: &str) -> String {
     value.chars().take(10).collect()
+}
+
+fn allowed_category(slug: &str) -> Option<CategoryFilter> {
+    CATEGORY_FILTERS
+        .iter()
+        .copied()
+        .find(|category| category.slug == slug)
+}
+
+fn render_category_filters(active_category: Option<&str>) -> String {
+    let all_class = category_filter_class(active_category.is_none());
+    let mut links = vec![format!(
+        r#"<a href="/posts" class="{all_class}">All</a>"#
+    )];
+
+    links.extend(CATEGORY_FILTERS.iter().map(|category| {
+        let class = category_filter_class(active_category == Some(category.slug));
+        format!(
+            r#"<a href="/categories/{slug}" class="{class}">{name}</a>"#,
+            slug = escape_html(category.slug),
+            name = escape_html(category.name),
+        )
+    }));
+
+    format!(
+        r#"<nav aria-label="Category filters" class="flex flex-wrap gap-2">{}</nav>"#,
+        links.join("")
+    )
+}
+
+fn category_filter_class(active: bool) -> &'static str {
+    if active {
+        "rounded-lg bg-accent-500 px-3 py-2 text-sm font-black text-white"
+    } else {
+        "rounded-lg border border-white/10 px-3 py-2 text-sm font-black text-foreground transition hover:border-accent-400 hover:text-accent-400"
+    }
+}
+
+fn render_headline(headline: &str) -> String {
+    if headline == "myClawTeam Blog" {
+        "myClawTeam <span class=\"text-accent-400\">Blog</span>".to_owned()
+    } else {
+        escape_html(headline)
+    }
+}
+
+fn render_not_found_page(message: &str) -> String {
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Not found | myClawTeam Blog</title>
+<link rel="stylesheet" href="/pkg/mike-t-4b46-mct-official-blog.css" />
+</head>
+<body>
+<main class="min-h-screen bg-background px-6 py-24 text-foreground sm:px-10">
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-4">
+<p class="text-kicker font-bold uppercase tracking-wide text-accent-400">404</p>
+<h1 class="text-4xl font-black">Category not found</h1>
+<p class="text-muted">{message}</p>
+<a href="/posts" class="w-fit rounded-lg border border-accent-400/40 px-3 py-2 text-sm font-black text-accent-400 transition hover:bg-accent-500 hover:text-white">View all posts</a>
+</div>
+</main>
+</body>
+</html>"#
+    )
 }
 
 fn escape_html(value: &str) -> String {

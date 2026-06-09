@@ -233,6 +233,24 @@ pub async fn count_published_posts(pool: &PgPool) -> Result<i64> {
     .await
 }
 
+pub async fn count_published_posts_by_category(
+    pool: &PgPool,
+    category_slug: &str,
+) -> Result<i64> {
+    sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)
+        FROM posts
+        INNER JOIN categories ON categories.id = posts.category_id
+        WHERE posts.status = 'published'
+          AND categories.slug = $1
+        "#,
+    )
+    .bind(category_slug)
+    .fetch_one(pool)
+    .await
+}
+
 pub async fn list_published_posts_by_category(
     pool: &PgPool,
     category_slug: &str,
