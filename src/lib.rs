@@ -15,6 +15,9 @@ pub mod repositories;
 #[cfg(feature = "ssr")]
 pub mod storage;
 
+#[cfg(feature = "ssr")]
+pub mod uploads;
+
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate() {
