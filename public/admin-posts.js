@@ -51,6 +51,15 @@
     return cell;
   };
 
+  const readError = async (response, fallback) => {
+    try {
+      const payload = await response.json();
+      return payload.error || fallback;
+    } catch (_error) {
+      return fallback;
+    }
+  };
+
   const renderEmpty = () => {
     const row = document.createElement("tr");
     const cell = createCell("px-4 py-6 text-sm font-bold text-muted");
@@ -93,7 +102,40 @@
 
       const actions = createCell("px-4 py-4");
       const actionGroup = document.createElement("div");
-      actionGroup.className = "flex justify-end gap-2";
+      actionGroup.className = "flex flex-wrap justify-end gap-2";
+
+      const nextPublished = post.status !== "published";
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-foreground transition hover:border-accent-400 hover:text-accent-400 disabled:cursor-not-allowed disabled:opacity-60";
+      toggle.textContent = nextPublished ? "Publish" : "Unpublish";
+      toggle.addEventListener("click", async () => {
+        const action = nextPublished ? "Publish" : "Unpublish";
+        if (!window.confirm(`${action} "${post.title}"?`)) {
+          return;
+        }
+
+        toggle.disabled = true;
+        setError("");
+
+        try {
+          const response = await fetch(`/admin/api/posts/${post.id}/status`, {
+            method: "PUT",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ published: nextPublished }),
+          });
+
+          if (!response.ok) {
+            throw new Error(await readError(response, `Could not ${action.toLowerCase()} post.`));
+          }
+
+          await loadPosts();
+        } catch (error) {
+          toggle.disabled = false;
+          setError(error instanceof Error ? error.message : "Could not change post status.");
+        }
+      });
 
       const edit = document.createElement("a");
       edit.className = "rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-foreground transition hover:border-accent-400 hover:text-accent-400";
@@ -105,7 +147,7 @@
       remove.className = "rounded-lg border border-accent-400/50 px-3 py-2 text-sm font-bold text-accent-400 transition hover:bg-accent-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60";
       remove.textContent = "Delete";
       remove.addEventListener("click", async () => {
-        if (!window.confirm(`Delete "${post.title}"?`)) {
+        if (!window.confirm(`Delete "${post.title}" permanently?`)) {
           return;
         }
 
@@ -119,13 +161,7 @@
           });
 
           if (!response.ok) {
-            let message = "Could not delete post.";
-            try {
-              const payload = await response.json();
-              message = payload.error || message;
-            } catch (_error) {
-            }
-            throw new Error(message);
+            throw new Error(await readError(response, "Could not delete post."));
           }
 
           await loadPosts();
@@ -135,7 +171,7 @@
         }
       });
 
-      actionGroup.append(edit, remove);
+      actionGroup.append(toggle, edit, remove);
       actions.append(actionGroup);
       row.append(title, status, category, updated, actions);
 
