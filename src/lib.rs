@@ -14,6 +14,9 @@ pub mod config;
 pub mod db;
 
 #[cfg(feature = "ssr")]
+pub mod public_posts;
+
+#[cfg(feature = "ssr")]
 pub mod repositories;
 
 #[cfg(feature = "ssr")]
