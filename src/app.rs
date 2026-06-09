@@ -1,4 +1,4 @@
-use leptos::prelude::*;
+use leptos::{form::ActionForm, prelude::*};
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
     components::{Outlet, ParentRoute, Route, Router, Routes},
@@ -39,6 +39,7 @@ pub fn App() -> impl IntoView {
                         </ParentRoute>
                         <ParentRoute path=path!("/admin") view=AdminLayout>
                             <Route path=path!("") view=AdminHome />
+                            <Route path=path!("login") view=LoginPage />
                         </ParentRoute>
                     </Routes>
                 </ErrorBoundary>
@@ -79,10 +80,10 @@ fn AdminLayout() -> impl IntoView {
                         "myClawTeam Blog"
                     </a>
                     <a
-                        href="/admin"
+                        href="/admin/login"
                         class="rounded-lg border border-accent-400/50 px-3 py-2 text-sm font-bold text-accent-400"
                     >
-                        "Admin"
+                        "Sign in"
                     </a>
                 </div>
             </header>
@@ -145,7 +146,103 @@ fn AdminHome() -> impl IntoView {
         <section class="rounded-lg border border-white/10 bg-background/70 p-6">
             <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Admin"</p>
             <h1 class="mt-3 text-4xl font-black text-foreground">"Publishing workspace"</h1>
+            <a
+                href="/admin/login"
+                class="mt-6 inline-flex rounded-lg bg-accent-500 px-4 py-3 text-sm font-black text-white transition hover:bg-accent-400"
+            >
+                "Sign in"
+            </a>
         </section>
+    }
+}
+
+#[component]
+fn LoginPage() -> impl IntoView {
+    let login = ServerAction::<AdminLogin>::new();
+    let pending = login.pending();
+    let value = login.value();
+    let has_error = move || matches!(value.get(), Some(Err(_)));
+
+    view! {
+        <section class="mx-auto flex w-full max-w-md flex-col gap-6 rounded-lg border border-white/10 bg-background/80 p-6 shadow-2xl shadow-black/20">
+            <div>
+                <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Admin"</p>
+                <h1 class="mt-3 text-3xl font-black text-foreground">"Sign in"</h1>
+            </div>
+            <ActionForm action=login attr:class="flex flex-col gap-4">
+                <label class="flex flex-col gap-2 text-sm font-bold text-foreground">
+                    "Username"
+                    <input
+                        class="rounded-lg border border-white/10 bg-surface-900 px-3 py-3 text-base text-foreground outline-none transition placeholder:text-muted focus:border-accent-400"
+                        type="text"
+                        name="username"
+                        autocomplete="username"
+                        required
+                    />
+                </label>
+                <label class="flex flex-col gap-2 text-sm font-bold text-foreground">
+                    "Password"
+                    <input
+                        class="rounded-lg border border-white/10 bg-surface-900 px-3 py-3 text-base text-foreground outline-none transition placeholder:text-muted focus:border-accent-400"
+                        type="password"
+                        name="password"
+                        autocomplete="current-password"
+                        required
+                    />
+                </label>
+                <Show when=has_error fallback=|| ()>
+                    <p class="rounded-lg border border-accent-500/40 bg-accent-500/10 px-3 py-2 text-sm font-bold text-accent-300">
+                        "Invalid username or password."
+                    </p>
+                </Show>
+                <button
+                    class="rounded-lg bg-accent-500 px-4 py-3 text-sm font-black text-white transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="submit"
+                    disabled=move || pending.get()
+                >
+                    {move || if pending.get() { "Signing in..." } else { "Sign in" }}
+                </button>
+            </ActionForm>
+        </section>
+    }
+}
+
+#[server]
+async fn admin_login(username: String, password: String) -> Result<(), ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        use axum::http::{HeaderValue, header};
+        use leptos_axum::{ResponseOptions, redirect};
+
+        use crate::{auth, config::AppConfig};
+
+        let config = use_context::<AppConfig>().ok_or_else(|| {
+            ServerFnError::ServerError("Application configuration is unavailable.".to_owned())
+        })?;
+        let cookie =
+            auth::authenticate_admin_cookie(&config.admin, &config.session, &username, &password)
+                .map_err(|_| {
+                    ServerFnError::ServerError("Invalid username or password.".to_owned())
+                })?;
+        let cookie = HeaderValue::from_str(&cookie).map_err(|_| {
+            ServerFnError::ServerError("Could not set the admin session cookie.".to_owned())
+        })?;
+        let response = use_context::<ResponseOptions>().ok_or_else(|| {
+            ServerFnError::ServerError("Response options are unavailable.".to_owned())
+        })?;
+
+        response.append_header(header::SET_COOKIE, cookie);
+        redirect("/admin");
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = (username, password);
+        Err(ServerFnError::ServerError(
+            "Admin login is only available on the server.".to_owned(),
+        ))
     }
 }
 
