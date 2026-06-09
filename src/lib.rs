@@ -2,6 +2,9 @@ pub mod app;
 pub mod post_functions;
 
 #[cfg(feature = "ssr")]
+pub mod admin_posts;
+
+#[cfg(feature = "ssr")]
 pub mod auth;
 
 #[cfg(feature = "ssr")]

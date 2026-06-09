@@ -154,8 +154,53 @@ fn AdminHome() -> impl IntoView {
                 <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Admin"</p>
                 <h1 class="mt-3 text-4xl font-black text-foreground">"Publishing workspace"</h1>
             </section>
+            <PostDashboard />
             <MediaPicker />
         </div>
+    }
+}
+
+#[component]
+fn PostDashboard() -> impl IntoView {
+    view! {
+        <section data-admin-posts class="rounded-lg border border-white/10 bg-background/70 p-6">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Posts"</p>
+                    <h2 class="mt-2 text-2xl font-black text-foreground">"Dashboard"</h2>
+                </div>
+                <a
+                    class="inline-flex items-center justify-center rounded-lg bg-accent-500 px-4 py-3 text-sm font-black text-white transition hover:bg-accent-400"
+                    href="/admin/posts/new"
+                >
+                    "New post"
+                </a>
+            </div>
+            <p data-admin-posts-error class="mt-4 hidden rounded-lg border border-accent-500/40 bg-accent-500/10 px-3 py-2 text-sm font-bold text-accent-300"></p>
+            <div class="mt-6 overflow-hidden rounded-lg border border-white/10 bg-surface-900">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border-collapse text-left text-sm">
+                        <thead class="border-b border-white/10 bg-background/80 text-xs font-black uppercase tracking-wide text-muted">
+                            <tr>
+                                <th class="px-4 py-3">"Title"</th>
+                                <th class="px-4 py-3">"Status"</th>
+                                <th class="px-4 py-3">"Category"</th>
+                                <th class="px-4 py-3">"Updated"</th>
+                                <th class="px-4 py-3 text-right">"Actions"</th>
+                            </tr>
+                        </thead>
+                        <tbody data-admin-posts-table class="divide-y divide-white/10">
+                            <tr>
+                                <td class="px-4 py-4 text-sm font-bold text-muted" colspan="5">
+                                    "Loading posts..."
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <script src="/admin-posts.js" defer></script>
+        </section>
     }
 }
 
