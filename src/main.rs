@@ -1,12 +1,13 @@
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use axum::Router;
+    use axum::{Router, middleware};
     use leptos::logging::log;
     use leptos::prelude::*;
     use leptos_axum::{LeptosRoutes, generate_route_list};
     use mike_t_4b46_mct_official_blog::{
         app::{App, shell},
+        auth,
         config::AppConfig,
         db,
         storage::ObjectStorage,
@@ -43,6 +44,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = Router::new()
         .leptos_routes_with_context(&leptos_options, routes, provide_db_context, render_shell)
         .fallback(leptos_axum::file_and_error_handler(shell))
+        .layer(middleware::from_fn_with_state(
+            app_config.clone(),
+            auth::require_admin_session,
+        ))
         .with_state(leptos_options);
 
     log!("listening on http://{addr}");

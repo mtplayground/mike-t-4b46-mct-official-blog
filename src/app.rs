@@ -37,9 +37,9 @@ pub fn App() -> impl IntoView {
                         <ParentRoute path=path!("/") view=PublicLayout>
                             <Route path=path!("") view=HomePage />
                         </ParentRoute>
+                        <Route path=path!("/admin/login") view=LoginPage />
                         <ParentRoute path=path!("/admin") view=AdminLayout>
                             <Route path=path!("") view=AdminHome />
-                            <Route path=path!("login") view=LoginPage />
                         </ParentRoute>
                     </Routes>
                 </ErrorBoundary>
@@ -72,6 +72,9 @@ fn PublicLayout() -> impl IntoView {
 
 #[component]
 fn AdminLayout() -> impl IntoView {
+    let logout = ServerAction::<AdminLogout>::new();
+    let logout_pending = logout.pending();
+
     view! {
         <div class="flex min-h-screen flex-col bg-surface-900/70">
             <header class="border-b border-white/10 bg-background/80">
@@ -79,12 +82,15 @@ fn AdminLayout() -> impl IntoView {
                     <a href="/" class="text-sm font-bold text-foreground">
                         "myClawTeam Blog"
                     </a>
-                    <a
-                        href="/admin/login"
-                        class="rounded-lg border border-accent-400/50 px-3 py-2 text-sm font-bold text-accent-400"
-                    >
-                        "Sign in"
-                    </a>
+                    <ActionForm action=logout attr:class="m-0">
+                        <button
+                            class="rounded-lg border border-accent-400/50 px-3 py-2 text-sm font-bold text-accent-400 transition hover:bg-accent-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            type="submit"
+                            disabled=move || logout_pending.get()
+                        >
+                            {move || if logout_pending.get() { "Signing out..." } else { "Sign out" }}
+                        </button>
+                    </ActionForm>
                 </div>
             </header>
             <main class="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
@@ -146,12 +152,6 @@ fn AdminHome() -> impl IntoView {
         <section class="rounded-lg border border-white/10 bg-background/70 p-6">
             <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Admin"</p>
             <h1 class="mt-3 text-4xl font-black text-foreground">"Publishing workspace"</h1>
-            <a
-                href="/admin/login"
-                class="mt-6 inline-flex rounded-lg bg-accent-500 px-4 py-3 text-sm font-black text-white transition hover:bg-accent-400"
-            >
-                "Sign in"
-            </a>
         </section>
     }
 }
@@ -242,6 +242,36 @@ async fn admin_login(username: String, password: String) -> Result<(), ServerFnE
         let _ = (username, password);
         Err(ServerFnError::ServerError(
             "Admin login is only available on the server.".to_owned(),
+        ))
+    }
+}
+
+#[server]
+async fn admin_logout() -> Result<(), ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        use axum::http::{HeaderValue, header};
+        use leptos_axum::{ResponseOptions, redirect};
+
+        use crate::auth;
+
+        let cookie = HeaderValue::from_str(&auth::clear_admin_session_cookie()).map_err(|_| {
+            ServerFnError::ServerError("Could not clear the admin session cookie.".to_owned())
+        })?;
+        let response = use_context::<ResponseOptions>().ok_or_else(|| {
+            ServerFnError::ServerError("Response options are unavailable.".to_owned())
+        })?;
+
+        response.append_header(header::SET_COOKIE, cookie);
+        redirect("/admin/login");
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "ssr"))]
+    {
+        Err(ServerFnError::ServerError(
+            "Admin logout is only available on the server.".to_owned(),
         ))
     }
 }

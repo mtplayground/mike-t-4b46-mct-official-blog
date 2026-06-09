@@ -178,6 +178,37 @@ pub fn verify_admin_cookie_header(
     verify_admin_session_token(admin, session, &token)
 }
 
+#[cfg(feature = "ssr")]
+pub async fn require_admin_session(
+    axum::extract::State(config): axum::extract::State<crate::config::AppConfig>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::{
+        http::header,
+        response::{IntoResponse, Redirect},
+    };
+
+    if !is_protected_admin_path(request.uri().path()) {
+        return next.run(request).await;
+    }
+
+    let has_session = request
+        .headers()
+        .get(header::COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|cookie| {
+            verify_admin_cookie_header(&config.admin, &config.session, cookie).ok()
+        })
+        .is_some();
+
+    if has_session {
+        next.run(request).await
+    } else {
+        Redirect::to("/admin/login").into_response()
+    }
+}
+
 pub fn extract_cookie_value(cookie_header: &str, cookie_name: &str) -> Option<String> {
     cookie_header.split(';').find_map(|cookie| {
         let (name, value) = cookie.trim().split_once('=')?;
@@ -204,6 +235,10 @@ fn parse_timestamp(value: Option<&str>) -> Result<OffsetDateTime, AuthError> {
         .map_err(|_| AuthError::InvalidSession)?;
 
     OffsetDateTime::from_unix_timestamp(timestamp).map_err(|_| AuthError::InvalidSession)
+}
+
+fn is_protected_admin_path(path: &str) -> bool {
+    (path == "/admin" || path.starts_with("/admin/")) && path != "/admin/login"
 }
 
 fn parse_username(value: Option<&str>) -> Result<String, AuthError> {
