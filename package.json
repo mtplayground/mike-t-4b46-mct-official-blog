@@ -3,9 +3,12 @@
   "private": true,
   "scripts": {
     "css:build": "tailwindcss -i ./style/tailwind.css -o ./target/tailwind-check.css --minify",
-    "css:watch": "tailwindcss -i ./style/tailwind.css -o ./target/tailwind-check.css --watch"
+    "css:watch": "tailwindcss -i ./style/tailwind.css -o ./target/tailwind-check.css --watch",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/cli": "^4.3.0",
     "tailwindcss": "^4.3.0"
   }
