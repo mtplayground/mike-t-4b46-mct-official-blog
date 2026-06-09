@@ -69,7 +69,7 @@
     const link = document.createElement("a");
     link.className =
       "rounded-lg border border-white/10 px-3 py-2 text-sm font-black text-foreground transition group-hover:border-accent-400 group-hover:text-accent-400";
-    link.href = "/";
+    link.href = "/posts";
     link.textContent = "Read";
     link.setAttribute("aria-label", `Read ${post.title || "post"}`);
 

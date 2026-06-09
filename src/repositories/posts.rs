@@ -221,6 +221,18 @@ pub async fn list_published_posts(pool: &PgPool, limit: i64, offset: i64) -> Res
     .await
 }
 
+pub async fn count_published_posts(pool: &PgPool) -> Result<i64> {
+    sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)
+        FROM posts
+        WHERE status = 'published'
+        "#,
+    )
+    .fetch_one(pool)
+    .await
+}
+
 pub async fn list_published_posts_by_category(
     pool: &PgPool,
     category_slug: &str,

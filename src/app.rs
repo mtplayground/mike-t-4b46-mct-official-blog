@@ -118,6 +118,7 @@ fn SiteHeader() -> impl IntoView {
                 </a>
                 <nav aria-label="Primary navigation" class="flex items-center gap-2 text-sm font-bold text-muted">
                     <a href="/" class="rounded-lg px-3 py-2 transition hover:bg-white/5 hover:text-foreground">"Home"</a>
+                    <a href="/posts" class="rounded-lg px-3 py-2 transition hover:bg-white/5 hover:text-foreground">"Posts"</a>
                     <a href="/admin" class="rounded-lg border border-accent-400/40 px-3 py-2 text-accent-400 transition hover:bg-accent-500 hover:text-white">"Admin"</a>
                 </nav>
             </div>
@@ -136,6 +137,7 @@ fn SiteFooter() -> impl IntoView {
                 </div>
                 <nav aria-label="Footer navigation" class="flex flex-wrap gap-3 font-bold">
                     <a href="/" class="transition hover:text-foreground">"Home"</a>
+                    <a href="/posts" class="transition hover:text-foreground">"Posts"</a>
                     <a href="/admin" class="transition hover:text-accent-400">"Admin"</a>
                 </nav>
             </div>
@@ -180,21 +182,21 @@ fn HomePage() -> impl IntoView {
                         title="The shape of useful momentum"
                         excerpt="Short reflections on decisions, constraints, and work that keeps moving."
                         meta="Featured"
-                        href="/"
+                        href="/posts"
                     />
                     <PostCard
                         category="Product Progress"
                         title="What shipped, what sharpened"
                         excerpt="A running record of product movement from rough cut to sturdier release."
                         meta="Build notes"
-                        href="/"
+                        href="/posts"
                     />
                     <PostCard
                         category="Announcements"
                         title="Updates worth calling out"
                         excerpt="Launch notes and important changes for readers following the work."
                         meta="News"
-                        href="/"
+                        href="/posts"
                     />
                 </div>
             </section>
