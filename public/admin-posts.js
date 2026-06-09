@@ -97,7 +97,7 @@
 
       const edit = document.createElement("a");
       edit.className = "rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-foreground transition hover:border-accent-400 hover:text-accent-400";
-      edit.href = `/admin/posts/${post.id}/edit`;
+      edit.href = `/admin/posts/edit?id=${post.id}`;
       edit.textContent = "Edit";
 
       const remove = document.createElement("button");
