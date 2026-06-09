@@ -5,13 +5,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Extension, Router,
         extract::DefaultBodyLimit,
         middleware,
-        routing::{get, post},
+        routing::{delete, get, post},
     };
     use leptos::logging::log;
     use leptos::prelude::*;
     use leptos_axum::{LeptosRoutes, generate_route_list};
     use mike_t_4b46_mct_official_blog::{
         app::{App, shell},
+        admin_posts,
         auth,
         config::AppConfig,
         db,
@@ -54,6 +55,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             post(uploads::upload_media)
                 .layer(DefaultBodyLimit::max(uploads::MAX_MULTIPART_BYTES)),
         )
+        .route("/admin/api/posts", get(admin_posts::list_posts))
+        .route("/admin/api/posts/{id}", delete(admin_posts::delete_post))
         .leptos_routes_with_context(&leptos_options, routes, provide_db_context, render_shell)
         .fallback(leptos_axum::file_and_error_handler(shell))
         .layer(Extension(db_pool.clone()))
