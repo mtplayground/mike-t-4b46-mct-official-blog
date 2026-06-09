@@ -1,5 +1,5 @@
 use leptos::{form::ActionForm, prelude::*};
-use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{Meta, MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
     components::{Outlet, ParentRoute, Route, Router, Routes},
     path,
@@ -163,6 +163,28 @@ fn SiteFooter() -> impl IntoView {
 #[component]
 fn HomePage() -> impl IntoView {
     view! {
+        <Title text="myClawTeam Blog | By talking, serious delivery." />
+        <Meta
+            name="description"
+            content="Recent posts, field notes, and delivery updates from the myClawTeam build."
+        />
+        <Meta property="og:site_name" content="myClawTeam Blog" />
+        <Meta property="og:type" content="website" />
+        <Meta property="og:title" content="myClawTeam Blog" />
+        <Meta
+            property="og:description"
+            content="Recent posts, field notes, and delivery updates from the myClawTeam build."
+        />
+        <Meta property="og:url" content="/" />
+        <Meta property="og:image" content="/og-card.svg" />
+        <Meta property="og:image:alt" content="myClawTeam Blog" />
+        <Meta name="twitter:card" content="summary_large_image" />
+        <Meta name="twitter:title" content="myClawTeam Blog" />
+        <Meta
+            name="twitter:description"
+            content="Recent posts, field notes, and delivery updates from the myClawTeam build."
+        />
+        <Meta name="twitter:image" content="/og-card.svg" />
         <div class="mx-auto flex w-full max-w-6xl flex-col gap-12 px-6 py-16 sm:px-10 lg:py-20">
             <section class="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.7fr)] lg:items-end">
                 <div class="flex flex-col gap-7">

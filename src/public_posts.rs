@@ -18,6 +18,8 @@ const RECENT_POST_LIMIT: i64 = 6;
 const POSTS_PER_PAGE: i64 = 9;
 const EXCERPT_CHAR_LIMIT: usize = 160;
 const PRESIGNED_MEDIA_TTL: Duration = Duration::from_secs(60 * 60);
+const SITE_NAME: &str = "myClawTeam Blog";
+const OG_IMAGE_PATH: &str = "/og-card.svg";
 const CATEGORY_FILTERS: [CategoryFilter; 3] = [
     CategoryFilter {
         slug: "thoughts",
@@ -177,6 +179,18 @@ pub async fn posts_index(
     let published_posts = posts::list_published_posts(&pool, POSTS_PER_PAGE, offset)
         .await
         .map_err(PublicPostsError::Database)?;
+    let description = if current_page > 1 {
+        format!(
+            "Page {current_page} of the myClawTeam Blog archive: published notes, updates, and delivery writeups."
+        )
+    } else {
+        "A paginated archive of published notes, updates, and delivery writeups.".to_owned()
+    };
+    let page_title = if current_page > 1 {
+        format!("Posts, page {current_page} | myClawTeam Blog")
+    } else {
+        "Posts | myClawTeam Blog".to_owned()
+    };
 
     Ok(Html(render_posts_page(
         &published_posts,
@@ -184,10 +198,10 @@ pub async fn posts_index(
         current_page,
         total_pages,
         total_posts,
-        "Posts | myClawTeam Blog",
+        &page_title,
         "Published posts",
         "myClawTeam Blog",
-        "A paginated archive of published notes, updates, and delivery writeups.",
+        &description,
         "/posts",
         None,
     )))
@@ -219,8 +233,20 @@ pub async fn category_index(
         posts::list_published_posts_by_category(&pool, category.slug, POSTS_PER_PAGE, offset)
             .await
             .map_err(PublicPostsError::Database)?;
-    let page_title = format!("{} | myClawTeam Blog", category.name);
+    let page_title = if current_page > 1 {
+        format!("{} posts, page {} | myClawTeam Blog", category.name, current_page)
+    } else {
+        format!("{} posts | myClawTeam Blog", category.name)
+    };
     let headline = format!("{} posts", category.name);
+    let description = if current_page > 1 {
+        format!(
+            "Page {current_page} of {} posts from myClawTeam Blog. {}",
+            category.name, category.description
+        )
+    } else {
+        category.description.to_owned()
+    };
     let base_path = format!("/categories/{}", category.slug);
 
     Ok(Html(render_posts_page(
@@ -232,7 +258,7 @@ pub async fn category_index(
         &page_title,
         "Category filter",
         &headline,
-        category.description,
+        &description,
         &base_path,
         Some(category.slug),
     )))
@@ -310,6 +336,13 @@ fn render_posts_page(
     };
     let pagination = render_pagination(current_page, total_pages, base_path);
     let category_filters = render_category_filters(active_category);
+    let canonical_path = pagination_path(base_path, current_page);
+    let metadata = render_metadata(Metadata {
+        title,
+        description,
+        path: &canonical_path,
+        og_type: "website",
+    });
 
     format!(
         r#"<!DOCTYPE html>
@@ -318,6 +351,7 @@ fn render_posts_page(
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>{title}</title>
+{metadata}
 <link rel="stylesheet" href="/pkg/mike-t-4b46-mct-official-blog.css" />
 </head>
 <body>
@@ -364,6 +398,7 @@ fn render_posts_page(
 </body>
 </html>"#,
         title = escape_html(title),
+        metadata = metadata,
         eyebrow = escape_html(eyebrow),
         headline = render_headline(headline),
         description = escape_html(description),
@@ -418,6 +453,15 @@ fn render_post_detail_page(
         .published_at
         .map(|value| first_date_chars(&value.to_string()))
         .unwrap_or_else(|| "Published".to_owned());
+    let description = excerpt_from_body(&post.body);
+    let page_title = format!("{} | myClawTeam Blog", post.title);
+    let canonical_path = format!("/posts/{}", post.slug);
+    let metadata = render_metadata(Metadata {
+        title: &page_title,
+        description: &description,
+        path: &canonical_path,
+        og_type: "article",
+    });
 
     format!(
         r#"<!DOCTYPE html>
@@ -426,6 +470,7 @@ fn render_post_detail_page(
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>{title} | myClawTeam Blog</title>
+{metadata}
 <link rel="stylesheet" href="/pkg/mike-t-4b46-mct-official-blog.css" />
 </head>
 <body>
@@ -474,6 +519,7 @@ fn render_post_detail_page(
 </body>
 </html>"#,
         title = escape_html(&post.title),
+        metadata = metadata,
         category = escape_html(category_name),
         category_href = escape_html(&category_href),
         published_at = escape_html(&published_at),
@@ -629,11 +675,70 @@ fn pagination_link(base_path: &str, page: i64, label: &str, current: bool) -> St
     )
 }
 
+fn pagination_path(base_path: &str, page: i64) -> String {
+    if page <= 1 {
+        base_path.to_owned()
+    } else {
+        format!("{base_path}?page={page}")
+    }
+}
+
 fn disabled_pagination_label(label: &str) -> String {
     format!(
         r#"<span class="rounded-lg border border-white/5 px-3 py-2 text-sm font-black text-muted opacity-50">{}</span>"#,
         escape_html(label)
     )
+}
+
+struct Metadata<'a> {
+    title: &'a str,
+    description: &'a str,
+    path: &'a str,
+    og_type: &'a str,
+}
+
+fn render_metadata(metadata: Metadata<'_>) -> String {
+    let canonical_url = absolute_url(metadata.path);
+    let image_url = absolute_url(OG_IMAGE_PATH);
+
+    format!(
+        r#"<meta name="description" content="{description}" />
+<link rel="canonical" href="{canonical_url}" />
+<meta property="og:site_name" content="{site_name}" />
+<meta property="og:type" content="{og_type}" />
+<meta property="og:title" content="{title}" />
+<meta property="og:description" content="{description}" />
+<meta property="og:url" content="{canonical_url}" />
+<meta property="og:image" content="{image_url}" />
+<meta property="og:image:alt" content="{site_name}" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="{title}" />
+<meta name="twitter:description" content="{description}" />
+<meta name="twitter:image" content="{image_url}" />"#,
+        title = escape_html(metadata.title),
+        description = escape_html(metadata.description),
+        canonical_url = escape_html(&canonical_url),
+        site_name = escape_html(SITE_NAME),
+        og_type = escape_html(metadata.og_type),
+        image_url = escape_html(&image_url),
+    )
+}
+
+fn absolute_url(path: &str) -> String {
+    let normalized_path = if path.starts_with('/') {
+        path.to_owned()
+    } else {
+        format!("/{path}")
+    };
+    let Ok(site_url) = std::env::var("SELF_URL") else {
+        return normalized_path;
+    };
+    let site_url = site_url.trim_end_matches('/');
+    if site_url.is_empty() {
+        normalized_path
+    } else {
+        format!("{site_url}{normalized_path}")
+    }
 }
 
 fn first_date_chars(value: &str) -> String {
