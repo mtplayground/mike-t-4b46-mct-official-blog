@@ -105,14 +105,20 @@ fn AdminLayout() -> impl IntoView {
 #[component]
 fn SiteHeader() -> impl IntoView {
     view! {
-        <header class="sticky top-0 z-10 border-b border-white/10 bg-background/85 backdrop-blur">
+        <header class="sticky top-0 z-20 border-b border-white/10 bg-background/90 shadow-red-glow backdrop-blur-xl">
             <div class="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4 sm:px-10">
-                <a href="/" class="text-base font-black text-foreground">
-                    "myClawTeam Blog"
+                <a href="/" class="group inline-flex items-center gap-3 text-base font-black text-foreground">
+                    <span class="grid h-9 w-9 place-items-center rounded-lg border border-accent-400/40 bg-accent-500 text-sm text-white shadow-red-glow">
+                        "M"
+                    </span>
+                    <span class="leading-tight">
+                        "myClawTeam"
+                        <span class="block text-xs font-bold uppercase tracking-wide text-accent-400">"Blog"</span>
+                    </span>
                 </a>
-                <nav aria-label="Primary navigation" class="flex items-center gap-4 text-sm font-bold text-muted">
-                    <a href="/" class="transition hover:text-foreground">"Home"</a>
-                    <a href="/admin" class="transition hover:text-accent-400">"Admin"</a>
+                <nav aria-label="Primary navigation" class="flex items-center gap-2 text-sm font-bold text-muted">
+                    <a href="/" class="rounded-lg px-3 py-2 transition hover:bg-white/5 hover:text-foreground">"Home"</a>
+                    <a href="/admin" class="rounded-lg border border-accent-400/40 px-3 py-2 text-accent-400 transition hover:bg-accent-500 hover:text-white">"Admin"</a>
                 </nav>
             </div>
         </header>
@@ -122,10 +128,16 @@ fn SiteHeader() -> impl IntoView {
 #[component]
 fn SiteFooter() -> impl IntoView {
     view! {
-        <footer class="border-t border-white/10">
-            <div class="mx-auto flex w-full max-w-6xl flex-col gap-2 px-6 py-8 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-10">
-                <p>"myClawTeam Blog"</p>
-                <p>"By talking, serious delivery."</p>
+        <footer class="border-t border-white/10 bg-background/70">
+            <div class="mx-auto grid w-full max-w-6xl gap-6 px-6 py-10 text-sm text-muted sm:grid-cols-[1fr_auto] sm:items-end sm:px-10">
+                <div>
+                    <p class="text-base font-black text-foreground">"myClawTeam Blog"</p>
+                    <p class="mt-2 max-w-xl leading-6">"By talking, serious delivery."</p>
+                </div>
+                <nav aria-label="Footer navigation" class="flex flex-wrap gap-3 font-bold">
+                    <a href="/" class="transition hover:text-foreground">"Home"</a>
+                    <a href="/admin" class="transition hover:text-accent-400">"Admin"</a>
+                </nav>
             </div>
         </footer>
     }
@@ -134,17 +146,77 @@ fn SiteFooter() -> impl IntoView {
 #[component]
 fn HomePage() -> impl IntoView {
     view! {
-        <section class="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-24 sm:px-10">
-            <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">
-                "By talking, serious delivery."
-            </p>
-            <h1 class="max-w-4xl text-display font-black leading-none text-foreground">
-                "myClawTeam Blog"
-            </h1>
-            <p class="max-w-2xl text-lead leading-8 text-muted">
-                "Notes, progress, and announcements from the myClawTeam build."
-            </p>
-        </section>
+        <div class="mx-auto flex w-full max-w-6xl flex-col gap-12 px-6 py-16 sm:px-10 lg:py-20">
+            <section class="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.7fr)] lg:items-end">
+                <div class="flex flex-col gap-7">
+                    <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">
+                        "By talking, serious delivery."
+                    </p>
+                    <h1 class="max-w-4xl text-display font-black leading-none text-foreground">
+                        "myClawTeam Blog"
+                    </h1>
+                    <p class="max-w-2xl text-lead leading-8 text-muted">
+                        "Notes, progress, and announcements from the myClawTeam build."
+                    </p>
+                </div>
+                <aside class="rounded-lg border border-white/10 bg-surface-900 p-5 shadow-red-glow">
+                    <p class="text-kicker font-bold uppercase tracking-wide text-accent-400">"Now"</p>
+                    <p class="mt-3 text-2xl font-black text-foreground">"Signal from the workbench."</p>
+                    <p class="mt-3 leading-7 text-muted">"Thoughts, launches, and the small product decisions that compound."</p>
+                </aside>
+            </section>
+            <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <PostCard
+                    category="Thoughts"
+                    title="The shape of useful momentum"
+                    excerpt="Short reflections on decisions, constraints, and work that keeps moving."
+                    meta="Draft lane"
+                    href="/"
+                />
+                <PostCard
+                    category="Product Progress"
+                    title="What shipped, what sharpened"
+                    excerpt="A running record of product movement from rough cut to sturdier release."
+                    meta="Build notes"
+                    href="/"
+                />
+                <PostCard
+                    category="Announcements"
+                    title="Updates worth calling out"
+                    excerpt="Launch notes and important changes for readers following the work."
+                    meta="News"
+                    href="/"
+                />
+            </section>
+        </div>
+    }
+}
+
+#[component]
+fn PostCard(
+    category: &'static str,
+    title: &'static str,
+    excerpt: &'static str,
+    meta: &'static str,
+    href: &'static str,
+) -> impl IntoView {
+    view! {
+        <article class="group flex min-h-72 flex-col justify-between rounded-lg border border-white/10 bg-surface-900 p-5 transition hover:-translate-y-1 hover:border-accent-400/60 hover:shadow-red-glow">
+            <div>
+                <div class="flex items-center justify-between gap-3">
+                    <p class="text-kicker font-black uppercase tracking-wide text-accent-400">{category}</p>
+                    <span class="h-2 w-2 rounded-full bg-accent-500"></span>
+                </div>
+                <h2 class="mt-5 text-2xl font-black leading-tight text-foreground">{title}</h2>
+                <p class="mt-4 leading-7 text-muted">{excerpt}</p>
+            </div>
+            <div class="mt-8 flex items-center justify-between gap-4 border-t border-white/10 pt-4">
+                <p class="text-xs font-bold uppercase tracking-wide text-muted">{meta}</p>
+                <a href=href class="rounded-lg border border-white/10 px-3 py-2 text-sm font-black text-foreground transition group-hover:border-accent-400 group-hover:text-accent-400">
+                    "Read"
+                </a>
+            </div>
+        </article>
     }
 }
 
