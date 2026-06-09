@@ -315,3 +315,54 @@ fn build_object_key(extension: &str) -> Result<String, UploadError> {
         extension
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::repositories::media::MediaType;
+
+    #[test]
+    fn validate_media_content_type_accepts_images_with_parameters() -> Result<(), UploadError> {
+        let validation = validate_media_content_type(" Image/PNG ; charset=binary ")?;
+
+        assert_eq!(validation.media_type, MediaType::Image);
+        assert_eq!(validation.content_type, "image/png");
+        assert_eq!(validation.max_bytes, MAX_IMAGE_BYTES);
+        assert_eq!(validation.media_kind, "Image");
+        assert_eq!(validation.extension, "png");
+
+        Ok(())
+    }
+
+    #[test]
+    fn validate_media_content_type_accepts_quicktime_video() -> Result<(), UploadError> {
+        let validation = validate_media_content_type("video/quicktime")?;
+
+        assert_eq!(validation.media_type, MediaType::Video);
+        assert_eq!(validation.content_type, "video/quicktime");
+        assert_eq!(validation.max_bytes, MAX_VIDEO_BYTES);
+        assert_eq!(validation.media_kind, "Video");
+        assert_eq!(validation.extension, "mov");
+
+        Ok(())
+    }
+
+    #[test]
+    fn validate_media_content_type_rejects_unsupported_type() {
+        let result = validate_media_content_type("application/pdf");
+
+        assert!(matches!(
+            result,
+            Err(UploadError::UnsupportedContentType(content_type))
+                if content_type == "application/pdf"
+        ));
+    }
+
+    #[test]
+    fn normalize_content_type_trims_lowercases_and_strips_parameters() {
+        assert_eq!(
+            normalize_content_type(" IMAGE/WEBP ; charset=UTF-8 "),
+            "image/webp"
+        );
+    }
+}
