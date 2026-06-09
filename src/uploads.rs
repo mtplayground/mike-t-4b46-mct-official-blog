@@ -17,10 +17,21 @@ use crate::{
     storage::{ObjectStorage, StorageError},
 };
 
-pub const MAX_UPLOAD_BYTES: usize = 50 * 1024 * 1024;
-pub const MAX_MULTIPART_BYTES: usize = MAX_UPLOAD_BYTES + 1024 * 1024;
+const MIB: usize = 1024 * 1024;
+pub const MAX_IMAGE_BYTES: usize = 10 * MIB;
+pub const MAX_VIDEO_BYTES: usize = 50 * MIB;
+pub const MAX_MULTIPART_BYTES: usize = MAX_VIDEO_BYTES + MIB;
 const PRESIGNED_URL_TTL: Duration = Duration::from_secs(60 * 60);
 const RANDOM_KEY_BYTES: usize = 18;
+
+const ALLOWED_IMAGE_TYPES: &[&str] = &[
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "image/avif",
+];
+const ALLOWED_VIDEO_TYPES: &[&str] = &["video/mp4", "video/webm", "video/quicktime"];
 
 #[derive(Serialize)]
 pub struct UploadResponse {
@@ -36,9 +47,13 @@ pub struct UploadResponse {
 pub enum UploadError {
     MissingFile,
     Multipart(axum::extract::multipart::MultipartError),
+    MissingContentType,
     UnsupportedContentType(String),
     EmptyFile,
-    TooLarge,
+    TooLarge {
+        media_kind: &'static str,
+        limit_bytes: usize,
+    },
     BodyTooLarge,
     Randomness(getrandom::Error),
     Storage(StorageError),
@@ -55,29 +70,28 @@ pub async fn upload_media(
             continue;
         }
 
-        let filename = field.filename().map(ToOwned::to_owned);
         let content_type = field
             .content_type()
             .map(|value| value.to_string())
-            .unwrap_or_else(|| "application/octet-stream".to_owned());
-        let media_type = media_type_from_content_type(&content_type)?;
-        let body = read_limited_field(field).await?;
+            .ok_or(UploadError::MissingContentType)?;
+        let validation = validate_media_content_type(&content_type)?;
+        let body = read_limited_field(field, validation.max_bytes, validation.media_kind).await?;
         if body.is_empty() {
             return Err(UploadError::EmptyFile);
         }
         let size_bytes = i64::try_from(body.len()).map_err(|_| UploadError::BodyTooLarge)?;
-        let object_key = build_object_key(filename.as_deref(), &content_type)?;
+        let object_key = build_object_key(validation.extension)?;
 
         let stored = storage
-            .put_object(&object_key, body, Some(&content_type))
+            .put_object(&object_key, body, Some(&validation.content_type))
             .await
             .map_err(UploadError::Storage)?;
         let media = media::create_media(
             &pool,
             CreateMediaInput {
                 object_key: stored.relative_key,
-                media_type,
-                content_type,
+                media_type: validation.media_type,
+                content_type: validation.content_type,
                 size_bytes,
             },
         )
@@ -113,10 +127,11 @@ impl IntoResponse for UploadError {
 impl UploadError {
     fn status_code(&self) -> StatusCode {
         match self {
-            Self::MissingFile | Self::UnsupportedContentType(_) | Self::EmptyFile => {
-                StatusCode::BAD_REQUEST
-            }
-            Self::TooLarge | Self::BodyTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::MissingFile
+            | Self::MissingContentType
+            | Self::UnsupportedContentType(_)
+            | Self::EmptyFile => StatusCode::BAD_REQUEST,
+            Self::TooLarge { .. } | Self::BodyTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Self::Multipart(_)
             | Self::Randomness(_)
             | Self::Storage(_)
@@ -124,16 +139,31 @@ impl UploadError {
         }
     }
 
-    fn message(&self) -> &'static str {
+    fn message(&self) -> String {
         match self {
-            Self::MissingFile => "A file field is required.",
-            Self::UnsupportedContentType(_) => "Only image and video uploads are supported.",
-            Self::EmptyFile => "The uploaded file is empty.",
-            Self::TooLarge | Self::BodyTooLarge => "The uploaded file is too large.",
+            Self::MissingFile => "A file field is required.".to_owned(),
+            Self::MissingContentType => {
+                "Uploaded files must include a content type.".to_owned()
+            }
+            Self::UnsupportedContentType(_) => format!(
+                "Unsupported file type. Allowed image types: {}. Allowed video types: {}.",
+                ALLOWED_IMAGE_TYPES.join(", "),
+                ALLOWED_VIDEO_TYPES.join(", ")
+            ),
+            Self::EmptyFile => "The uploaded file is empty.".to_owned(),
+            Self::TooLarge {
+                media_kind,
+                limit_bytes,
+            } => format!(
+                "{} uploads must be {} MiB or smaller.",
+                media_kind,
+                limit_bytes / MIB
+            ),
+            Self::BodyTooLarge => "The uploaded file is too large.".to_owned(),
             Self::Multipart(_)
             | Self::Randomness(_)
             | Self::Storage(_)
-            | Self::Database(_) => "Upload failed.",
+            | Self::Database(_) => "Upload failed.".to_owned(),
         }
     }
 }
@@ -143,11 +173,17 @@ impl fmt::Display for UploadError {
         match self {
             Self::MissingFile => write!(f, "multipart request did not contain a file field"),
             Self::Multipart(error) => write!(f, "failed to read multipart upload: {error}"),
+            Self::MissingContentType => write!(f, "uploaded file did not include a content type"),
             Self::UnsupportedContentType(content_type) => {
                 write!(f, "unsupported media content type: {content_type}")
             }
             Self::EmptyFile => write!(f, "uploaded file is empty"),
-            Self::TooLarge => write!(f, "uploaded file exceeds {MAX_UPLOAD_BYTES} bytes"),
+            Self::TooLarge {
+                media_kind,
+                limit_bytes,
+            } => {
+                write!(f, "{media_kind} upload exceeds {limit_bytes} bytes")
+            }
             Self::BodyTooLarge => write!(f, "uploaded file length does not fit in i64"),
             Self::Randomness(error) => write!(f, "failed to generate object key: {error}"),
             Self::Storage(error) => write!(f, "{error}"),
@@ -164,9 +200,10 @@ impl Error for UploadError {
             Self::Storage(error) => Some(error),
             Self::Database(error) => Some(error),
             Self::MissingFile
+            | Self::MissingContentType
             | Self::UnsupportedContentType(_)
             | Self::EmptyFile
-            | Self::TooLarge
+            | Self::TooLarge { .. }
             | Self::BodyTooLarge => None,
         }
     }
@@ -174,11 +211,13 @@ impl Error for UploadError {
 
 #[derive(Serialize)]
 struct ErrorResponse {
-    error: &'static str,
+    error: String,
 }
 
 async fn read_limited_field(
     mut field: axum::extract::multipart::Field<'_>,
+    max_bytes: usize,
+    media_kind: &'static str,
 ) -> Result<Vec<u8>, UploadError> {
     let mut body = Vec::new();
 
@@ -186,9 +225,12 @@ async fn read_limited_field(
         let next_len = body
             .len()
             .checked_add(chunk.len())
-            .ok_or(UploadError::TooLarge)?;
-        if next_len > MAX_UPLOAD_BYTES {
-            return Err(UploadError::TooLarge);
+            .ok_or(UploadError::BodyTooLarge)?;
+        if next_len > max_bytes {
+            return Err(UploadError::TooLarge {
+                media_kind,
+                limit_bytes: max_bytes,
+            });
         }
         body.extend_from_slice(&chunk);
     }
@@ -196,52 +238,52 @@ async fn read_limited_field(
     Ok(body)
 }
 
-fn media_type_from_content_type(content_type: &str) -> Result<MediaType, UploadError> {
-    if content_type.starts_with("image/") {
-        Ok(MediaType::Image)
-    } else if content_type.starts_with("video/") {
-        Ok(MediaType::Video)
-    } else {
-        Err(UploadError::UnsupportedContentType(content_type.to_owned()))
-    }
+struct ValidatedMedia {
+    media_type: MediaType,
+    content_type: String,
+    max_bytes: usize,
+    media_kind: &'static str,
+    extension: &'static str,
 }
 
-fn build_object_key(filename: Option<&str>, content_type: &str) -> Result<String, UploadError> {
-    let mut random = [0_u8; RANDOM_KEY_BYTES];
-    getrandom(&mut random).map_err(UploadError::Randomness)?;
-    let extension = file_extension(filename).or_else(|| content_type_extension(content_type));
-
-    Ok(format!(
-        "media/{}-{}{}",
-        OffsetDateTime::now_utc().unix_timestamp(),
-        URL_SAFE_NO_PAD.encode(random),
-        extension.unwrap_or_default()
-    ))
-}
-
-fn file_extension(filename: Option<&str>) -> Option<String> {
-    let extension = filename?.rsplit_once('.')?.1.to_ascii_lowercase();
-    if extension.is_empty()
-        || extension.len() > 12
-        || !extension.chars().all(|character| character.is_ascii_alphanumeric())
-    {
-        return None;
-    }
-
-    Some(format!(".{extension}"))
-}
-
-fn content_type_extension(content_type: &str) -> Option<String> {
-    let extension = match content_type {
-        "image/jpeg" => "jpg",
-        "image/png" => "png",
-        "image/gif" => "gif",
-        "image/webp" => "webp",
-        "video/mp4" => "mp4",
-        "video/webm" => "webm",
-        "video/quicktime" => "mov",
-        _ => return None,
+fn validate_media_content_type(content_type: &str) -> Result<ValidatedMedia, UploadError> {
+    let normalized = normalize_content_type(content_type);
+    let (media_type, max_bytes, media_kind, extension) = match normalized.as_str() {
+        "image/jpeg" => (MediaType::Image, MAX_IMAGE_BYTES, "Image", "jpg"),
+        "image/png" => (MediaType::Image, MAX_IMAGE_BYTES, "Image", "png"),
+        "image/gif" => (MediaType::Image, MAX_IMAGE_BYTES, "Image", "gif"),
+        "image/webp" => (MediaType::Image, MAX_IMAGE_BYTES, "Image", "webp"),
+        "image/avif" => (MediaType::Image, MAX_IMAGE_BYTES, "Image", "avif"),
+        "video/mp4" => (MediaType::Video, MAX_VIDEO_BYTES, "Video", "mp4"),
+        "video/webm" => (MediaType::Video, MAX_VIDEO_BYTES, "Video", "webm"),
+        "video/quicktime" => (MediaType::Video, MAX_VIDEO_BYTES, "Video", "mov"),
+        _ => return Err(UploadError::UnsupportedContentType(normalized)),
     };
 
-    Some(format!(".{extension}"))
+    Ok(ValidatedMedia {
+        media_type,
+        content_type: normalized,
+        max_bytes,
+        media_kind,
+        extension,
+    })
+}
+
+fn normalize_content_type(content_type: &str) -> String {
+    match content_type.split(';').next() {
+        Some(value) => value.trim().to_ascii_lowercase(),
+        None => String::new(),
+    }
+}
+
+fn build_object_key(extension: &str) -> Result<String, UploadError> {
+    let mut random = [0_u8; RANDOM_KEY_BYTES];
+    getrandom(&mut random).map_err(UploadError::Randomness)?;
+
+    Ok(format!(
+        "media/{}-{}.{}",
+        OffsetDateTime::now_utc().unix_timestamp(),
+        URL_SAFE_NO_PAD.encode(random),
+        extension
+    ))
 }
